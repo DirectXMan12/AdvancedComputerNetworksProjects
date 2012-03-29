@@ -7,6 +7,19 @@ PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
   this->is_server = is;
 }
 
+void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
+{
+
+  struct frame* fts;
+  fts = (frame*)info->si_value.sival_ptr;
+
+  // TODO: random error stuff
+
+  // send the frame on its merry way
+  // ARG! we can't use this here, so need to find a way around that
+  //send(this->tcp_sock, (void*)fts, sizeof(struct frame), 0);
+}
+
 int PhysicalLayer::init_connection(const char* client_name, const char* server_name)
 {
   // initialize TCP socket
@@ -29,7 +42,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     int lookup_res = getaddrinfo(server_name, "8675", &server_addr_hints, &server_addr);
     if (lookup_res < 0)
     {
-      POST_ERR("issue resolving server name \"" << argv[1] << "\" to address: " << gai_strerror(lookup_res));
+      POST_ERR("issue resolving server name \"" << server_name << "\" to address: " << gai_strerror(lookup_res));
       return -1;
     }
    
@@ -41,7 +54,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     {
       this->tcp_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
-      if (client_socket < 0)
+      if (this->tcp_sock < 0)
       {
         POST_ERR("unable to allocate a socket");
         return -2;
@@ -58,7 +71,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
       {
         // if we fail at connecting to this result address, close the socket and try again on a new socket with the next result address
         POST_WARN("Couldn't bind to one of the returned address: " << strerror(errno));
-        close(client_socket);
+        close(this->tcp_sock);
       } 
     } 
 
@@ -71,7 +84,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     freeaddrinfo(server_addr); // free the linked list of result addresses
     
     // send the client identification string
-    String msg = "PHYS_LAYER_CLIENT::";
+    std::string msg = "PHYS_LAYER_CLIENT::";
     msg+= client_name;
     msg+= "::";
     write(this->tcp_sock, msg.c_str(), sizeof(msg.c_str()));
@@ -84,7 +97,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     server_addr.sin_port = htons(8675);
 
     // allocate a file descriptor
-    server_socket = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    this->tcp_sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
     // bind to any address (as specified above)
     if (bind(this->tcp_sock, (const sockaddr*) &server_addr, sizeof(server_addr)) < 0)
@@ -94,7 +107,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     }
 
     // and listen (but not accept yet)
-    if (listen(server_socket, 5) < 0)
+    if (listen(this->tcp_sock, 5) < 0)
     {
       POST_ERR("issue listening on socket");
       return -2;
@@ -103,9 +116,14 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     this->acceptAsServer();
   }
   
-  // TODO: set signal handler for receiving a signal from DLL
+  struct sigaction act;
+  act.sa_sigaction = &handle_phys_layer_signals;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = SA_SIGINFO;
+  sigaction(SIG_NEW_FRAME, &act, NULL);
   return 0;
 }
+
 
 void PhysicalLayer::acceptAsServer()
 {
@@ -119,6 +137,7 @@ void PhysicalLayer::acceptAsServer()
 
     if (fork() == 0) // we are the child now
     {
+      this->tcp_sock = client_sock; // change the current process's tcp_sock value so that we can send information to the correct place via the signal handler
       while(1)
       {
           char buff[153];    // assume for now that frame is fixed-width, not variable
@@ -134,4 +153,3 @@ void PhysicalLayer::acceptAsServer()
   }
 }
 
-#endif
