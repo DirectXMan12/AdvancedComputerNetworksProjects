@@ -9,19 +9,6 @@ PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
 
 int PhysicalLayer::init_connection(const char* client_name, const char* server_name)
 {
-  // open Unix domain socket
-  this->ipc_sock = socket(PF_UNIX, SOCK_DGRAM, 0); 
-  struct sockaddr_un ipc_addr;
-
-  ipc_addr.sun_family = AF_UNIX;
-  ipc_addr.sun_path = PHYS_SOCK;
-  
-  this->ipc_addr = &ipc_addr;
-
-  // bind the specified file to this socket
-  bind(this->ipc_sock, this->ipc_addr, sizeof(struct sockaddr_un));
-  // TODO: initialize signal-based IO (or select-based IO if really needed)
-
   // initialize TCP socket
   if (!this->is_server) // if we are a client
   {
@@ -115,8 +102,8 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
 
     this->acceptAsServer();
   }
-
-  // TODO: set signal handler for TCP socket
+  
+  // TODO: set signal handler for receiving a signal from DLL
   return 0;
 }
 
@@ -132,29 +119,15 @@ void PhysicalLayer::acceptAsServer()
 
     if (fork() == 0) // we are the child now
     {
-      /*fd_set rfds;
-
-      FD_ZERO(&rfds);
-      FD_SET(client_sock, &rfds);*/
       while(1)
       {
-        /*int select_res = select(client_sock+1, &rfds, NULL, NULL, NULL);
-        if (select_res == -1)
-        {
-          POST_ERR("something went wrong with select!");
-          // TODO: do something
-        }
-        else if (FD_ISSET(client_addr, &rfds))
-        {*/
           char buff[153];    // assume for now that frame is fixed-width, not variable
           read(client_sock, buff, 153); // TODO: implement variable-width frames by encoding payload and writing an end-of-frame byte
-          sendto(this->ipc_sock, buff, 153, 0, this->ipc_addr, sizeof(struct sockaddr_un));
 
           sigval v;
-          v.sv_int = 0;
-          sigqueue(this->dll_pid, SIG_NEW_FRAME, v); // signal the dll that we have a new frame incoming
+          v.sival_ptr = buff;
+          sigqueue(this->dll_pid, SIG_NEW_FRAME, v); // signal the dll that we have a new frame incoming and attach the frame to that signal
 
-                  //}
       }
     }
     
