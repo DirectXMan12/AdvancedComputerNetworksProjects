@@ -2,11 +2,12 @@
 #define __SIGNAL_DEFS__
 
 // use sigqueue to queue these
-#define SIG_NEW_FRAME SIGRTMIN+4
-#define SIG_NEW_PACKET SIGRTMIN+5
+#define SIG_NEW_FRAME     SIGRTMIN+4
+#define SIG_NEW_PACKET    SIGRTMIN+5
+#define SIG_CHECKSUM_ERR  SIGRTMIN+6
+#define SIG_FLOW_ON       SIGRTMIN+7
 
 // use create_timer to create these timers
-#define SIG_TIMER_ELAPSED SIGRTMIN+6
+#define SIG_TIMER_ELAPSED SIGRTMIN+8
 
 #endif
-

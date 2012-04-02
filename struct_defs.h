@@ -20,7 +20,20 @@ struct packet
 {
   unsigned int command_type : 4; // indicates the type of command that this represents
   unsigned int seq_num : 4;  // TODO: what was this for?
+  unsigned char pl_data_len;
   char payload[256]; // up to 256 chars 
+};
+
+#endif
+
+#ifndef __WINDOW_LL_STRUCT__
+#define __WINDOW_LL_STRUCT__
+
+struct window_element
+{
+  struct window_element* previous;
+  struct window_element* next;
+  struct frame* fr;
 };
 
 #endif
