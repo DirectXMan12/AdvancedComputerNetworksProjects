@@ -54,6 +54,9 @@ timer_t* ack_timer_id;
 // see sigqueue(2) and sigaction(2) for more info about the attached values
 // note the lack of external function calls here -- see above
 // MACROS FTW
+// TODO:
+//  - check CRCs to make sure that we have a good frame
+//  - deal with reassembling packets from split frames
 void handle_signals(int signum, siginfo_t* info, void* context)
 {
   if(signum == SIG_NEW_FRAME)
@@ -86,11 +89,13 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     }
     else // otherwise this is an incoming data packet
     {
+      // TODO: check CRC
       if (recv_frame->seq_num == frame_expected)
       {
         // signal the physical layer
         sigval v;
         v.sival_ptr = recv_frame->payload;
+        // TODO: reassemble packet from 2 frames
         sigqueue(app_layer_pid, SIG_NEW_FRAME, v);
 
         INC(frame_expected);
@@ -109,6 +114,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     struct packet* recv_packet;
     recv_packet = (packet*)info->si_value.sival_ptr;
 
+    // TODO: check to see if this frame really needs to be split across two frames
     // this code initializes two frames and splits the packet over them
     frame fr1;
     fr1.is_ack = 0;

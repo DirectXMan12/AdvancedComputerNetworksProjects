@@ -15,10 +15,9 @@ void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
   struct frame* fts;
   fts = (frame*)info->si_value.sival_ptr;
 
-  // TODO: random error stuff
+  // TODO: do random error stuff in Data Link Layer
 
   // send the frame on its merry way
-  // ARG! we can't use 'this' here, so need to find a way around that
   send(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame), 0);
 }
 
