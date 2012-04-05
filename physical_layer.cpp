@@ -1,6 +1,8 @@
 #include "physical_layer.h"
 #include "err_macros.h"
 
+PhysicalLayer* phys_obj;
+
 PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
 {
   this->dll_pid = dp;
@@ -16,8 +18,8 @@ void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
   // TODO: random error stuff
 
   // send the frame on its merry way
-  // ARG! we can't use this here, so need to find a way around that
-  //send(this->tcp_sock, (void*)fts, sizeof(struct frame), 0);
+  // ARG! we can't use 'this' here, so need to find a way around that
+  send(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame), 0);
 }
 
 int PhysicalLayer::init_connection(const char* client_name, const char* server_name)
@@ -115,6 +117,8 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
 
     this->acceptAsServer();
   }
+
+  phys_obj = this;
   
   struct sigaction act;
   act.sa_sigaction = &handle_phys_layer_signals;

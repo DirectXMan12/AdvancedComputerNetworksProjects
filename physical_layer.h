@@ -20,13 +20,13 @@ class PhysicalLayer
     // is: is this a server physical layer?
     PhysicalLayer(pid_t dp, bool is);
     int init_connection( const char* client_name, const char* server_name);
+    int tcp_sock;
 
   private:
     void acceptAsServer();
     bool is_server;
     int ipc_sock;
     struct sockaddr_un* ipc_addr;
-    int tcp_sock;
     pid_t dll_pid;
 
 };
