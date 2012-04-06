@@ -209,9 +209,12 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
     num_buffered += 1;
+
+    frame *fr2q = NULL;
     
     //checking if the packet needs a second frame
-    if((int)(recv_packet->pl_data_len)<=148){
+    if((int)(recv_packet->pl_data_len)<=148)
+    {
       frame fr2;
       fr2.is_ack = 0;
       fr2.seq_num = fr1.seq_num;
@@ -226,6 +229,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       fr1.split_packet = 1;
       fr2.split_packet = 1;
       num_buffered += 1;
+      fr2q = &fr2;
     }
     
 
@@ -238,12 +242,15 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
     if (win_list == NULL) win_list = &win_elem1;
 
-    window_element win_elem2;
-    win_elem2.fr = &fr2;
-    win_elem2.prev = end_win_list;
-    win_elem2.next = NULL;
-    end_win_list->next = &win_elem2;
-    end_win_list = &win_elem2;
+    if (fr2q != NULL)
+    {
+      window_element win_elem2;
+      win_elem2.fr = fr2q;
+      win_elem2.prev = end_win_list;
+      win_elem2.next = NULL;
+      end_win_list->next = &win_elem2;
+      end_win_list = &win_elem2;
+    }
 
     sigval v1;
     v1.sival_ptr = &fr1;
@@ -253,13 +260,16 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
     timers[tv1].assoc_with = fr1.seq_num;
 
-    sigval v2;
-    v2.sival_ptr = &fr2;
-    sigqueue(phys_layer_pid, SIG_NEW_FRAME, v2);
-    int tv2 = 0;
-    FIND_BLANK_TIMER(tv2);
-    START_TIMER(tv2, TIMER_SECS, TIMER_NSECS);
-    timers[tv2].assoc_with = fr2.seq_num;
+    if (fr2q != NULL)
+    {
+      sigval v2;
+      v2.sival_ptr = fr2q;
+      sigqueue(phys_layer_pid, SIG_NEW_FRAME, v2);
+      int tv2 = 0;
+      FIND_BLANK_TIMER(tv2);
+      START_TIMER(tv2, TIMER_SECS, TIMER_NSECS);
+      timers[tv2].assoc_with = fr2q->seq_num;
+    }
 
   } 
   else if(signum == SIG_TIMER_ELAPSED)
