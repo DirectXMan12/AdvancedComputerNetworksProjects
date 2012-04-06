@@ -336,6 +336,8 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
 
   pid_t my_pid = getpid();
   phys_layer_pid = fork();
+  POST_INFO("phys_layer_pid");
+  POST_INFO(phys_layer_pid);
 
   win_list = NULL;
   frame_expected = 0;
