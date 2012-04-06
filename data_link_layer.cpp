@@ -18,6 +18,10 @@ unsigned int packet_num = 0;;
 unsigned int next_null_timer = 0;
 bool acks_needed = false;
 
+///potential variables to get two frames into the same packet
+char[] temp_packet = new char[300];
+bool packet_frame[] = {false, false};
+
 struct timer_info
 {
   int assoc_with; // the associated sequence number
@@ -55,8 +59,8 @@ timer_t* ack_timer_id;
 // note the lack of external function calls here -- see above
 // MACROS FTW
 // TODO:
-//  - check CRCs to make sure that we have a good frame
-//  - deal with reassembling packets from split frames
+//  - check CRCs to make sure that we have a good frame(seems to be done)
+//  - deal with reassembling packets from split frames(done unless we convert the packet to only send as many frames as needed)
 void handle_signals(int signum, siginfo_t* info, void* context)
 {
   if(signum == SIG_NEW_FRAME)
@@ -89,22 +93,40 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     }
     else // otherwise this is an incoming data packet
     {
-      // TODO: check CRC
-      if (recv_frame->seq_num == frame_expected)
-      {
-        // signal the physical layer
-        sigval v;
-        v.sival_ptr = recv_frame->payload;
-        // TODO: reassemble packet from 2 frames
-        sigqueue(app_layer_pid, SIG_NEW_FRAME, v);
-
-        INC(frame_expected);
-        if (acks_needed = false)
-        {
-          acks_needed = true;
-          START_ACK_TIMER(ACK_SECS, ACK_NSECS);
-        }
+      //check CRC
+      if (recv_frame->crc != MAKE_CRC(recv_frame)){//frame is corrupted
+        //send signal for checksum error
+         raise(SIG_CHECKSUM_ERR);
       }
+      else if (recv_frame->seq_num == frame_expected) //crc checked out and the frame is ok
+        {
+          // reassemble packet from 2 frames
+          packet_frame[recv_frame->end_of_packet]=true;
+          //cool math that will offset the payload onto the packet based on the frame number without a check
+          ((150*recv_frame->end_of_packet)+ recv_frame->payload)temp_packet;
+          
+          //check to see if both halves have been sent in
+          if(packet_frame[0] && packet_frame[1]){
+            //set the frame checks to false for the next packet
+            packet_frame[0]=false;
+            packet_frame[1]=false;
+            
+            // signal the physical layer
+            sigval v;
+            //dereference the temp_packet to give a pointer
+            v.sival_ptr = &temp_packet;
+            sigqueue(app_layer_pid, SIG_NEW_FRAME, v);
+            INC(frame_expected);
+            //need to clear the temp_packet
+            temp_packet = 0;
+            if (acks_needed = false)
+            {
+              acks_needed = true;
+              START_ACK_TIMER(ACK_SECS, ACK_NSECS);
+            }
+            
+          }
+        }
       
     }
   }
@@ -115,6 +137,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     recv_packet = (packet*)info->si_value.sival_ptr;
 
     // TODO: check to see if this frame really needs to be split across two frames
+    //// haven't checked the requirements but the way the packet is assembled it works better 
+    //// with always receiving two frames
     // this code initializes two frames and splits the packet over them
     frame fr1;
     fr1.is_ack = 0;
