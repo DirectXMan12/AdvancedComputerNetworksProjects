@@ -141,6 +141,9 @@ void PhysicalLayer::acceptAsServer()
     if (fork() == 0) // we are the child now
     {
       this->tcp_sock = client_sock; // change the current process's tcp_sock value so that we can send information to the correct place via the signal handler
+      char client_info[29];
+      read(client_sock, client_info, 29);
+      POST_INFO("client '" << client_info << "' connected!");
       while(1)
       {
           char buff[153];    // assume for now that frame is fixed-width, not variable
