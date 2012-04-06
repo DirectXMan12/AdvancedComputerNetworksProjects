@@ -1,6 +1,7 @@
 #include "physical_layer.h"
 #include "data_link_layer.h"
 #include "err_macros.h"
+#include "sys/wait.h"
 
 pid_t dll_pid;
 
@@ -49,10 +50,11 @@ int main(int argc, char* argv[])
     sigemptyset(&act.sa_mask);
     act.sa_flags = SA_SIGINFO;
 
-    sigaction(SIG_NEW_FRAME, &act, 0);
+    sigaction(SIG_NEW_PACKET, &act, 0);
+    sigaction(SIG_FLOW_ON, &act, 0);
   }
   POST_INFO("Sending a Test Packet");
   send_a_test_packet();
 
-  while(1) {}
+  while(1) waitpid(-1, 0, 0);
 }

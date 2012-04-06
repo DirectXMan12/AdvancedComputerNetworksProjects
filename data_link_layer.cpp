@@ -3,6 +3,7 @@
 #include "signal_defs.h"
 #include "physical_layer.h"
 #include "err_macros.h"
+#include "sys/wait.h"
 
 #define TIMER_SECS 1
 #define TIMER_NSECS 0
@@ -380,4 +381,6 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
       p.init_connection("client a", "localhost");
     }
   }
+
+  while(1) waitpid(-1, NULL, 0);
 }

@@ -1,6 +1,6 @@
 SOURCES = physical_layer.cpp data_link_layer.cpp main_laucher.cpp
 CC = g++
-CFLAGS = -lrt -g
+CFLAGS = -lrt -gdwarf-2 -g3
 OUTPUT = prog1
 
 main:
