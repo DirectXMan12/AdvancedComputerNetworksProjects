@@ -201,24 +201,30 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     frame fr1;
     fr1.is_ack = 0;
     fr1.seq_num = end_win_list->fr->seq_num;
+    fr1.split_packet = 0;
     INC(fr1.seq_num);
     fr1.end_of_packet = 0;
     INC_UPTO(packet_num, 0x111); // 3 bits = 8
     fr1.packet_num = packet_num;
     memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
-
-    frame fr2;
-    fr2.is_ack = 0;
-    fr2.seq_num = fr1.seq_num;
-    INC(fr2.seq_num);
-    fr2.end_of_packet = 1;
-    fr2.packet_num = packet_num;
-    memcpy(fr2.payload, recv_packet->payload+150, 106);
-    unsigned int ct = recv_packet->command_type;
-    memcpy(fr2.payload+106, &ct, 1); // copy the remaining parts of the packet struct over
-    MAKE_CRC(fr2);
-
+    
+    //checking if the packet needs a second frame
+    if((int)(recv_packet->pl_data_len)<=148){
+      frame fr2;
+      fr2.is_ack = 0;
+      fr2.seq_num = fr1.seq_num;
+      INC(fr2.seq_num);
+      fr2.end_of_packet = 1;
+      fr2.packet_num = packet_num;
+      memcpy(fr2.payload, recv_packet->payload+150, 106);
+      unsigned int ct = recv_packet->command_type;
+      memcpy(fr2.payload+106, &ct, 1); // copy the remaining parts of the packet struct over
+      MAKE_CRC(fr2);
+      //sets both frames to say that there should be 2 frames
+      fr1.split_packet = 1;
+      fr2.split_packet = 1;
+    }
     num_buffered += 2;
 
     window_element win_elem1;
