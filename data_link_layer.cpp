@@ -203,7 +203,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr1.seq_num = end_win_list->fr->seq_num;
     INC(fr1.seq_num);
     fr1.end_of_packet = 0;
-    INC_UPTO(packet_num, 15);
+    INC_UPTO(packet_num, 0x111); // 3 bits = 8
     fr1.packet_num = packet_num;
     memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);

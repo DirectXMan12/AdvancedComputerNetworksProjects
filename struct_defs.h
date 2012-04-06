@@ -5,8 +5,9 @@ struct frame
 {
   unsigned int is_ack : 1; 
   unsigned int seq_num : 2; // max 4 -> 2 bits
+  unsigned int split_packet : 1; // is this packet split over multiple frames
   unsigned int end_of_packet : 1; // is end of packet?
-  unsigned int packet_num : 4; // ids packet to which this frame belongs, b/c packets can be split across multiple frames
+  unsigned int packet_num : 3; // ids packet to which this frame belongs, b/c packets can be split across multiple frames
   char payload[150]; // should be up to 150
   char crc[2];
 };
