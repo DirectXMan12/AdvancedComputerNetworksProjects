@@ -31,7 +31,7 @@ struct packet
 
 struct window_element
 {
-  struct window_element* previous;
+  struct window_element* prev;
   struct window_element* next;
   struct frame* fr;
 };

@@ -2,6 +2,7 @@
 #include "data_link_layer.h"
 #include "signal_defs.h"
 #include "physical_layer.h"
+#include "err_macros.h"
 
 #define TIMER_SECS 1
 #define TIMER_NSECS 0
@@ -31,7 +32,7 @@ struct timer_info
 struct timer_info timers[4];
 timer_t* ack_timer_id;
 
-#define START_TIMER(timers_index, secs, nsecs) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.it_nsec = 0; its.it_value.tv_sec = secs; its.it_value.tv_nsec = nsecs; timer_settime(*(timers[timers_index].timer_id), 0, &its, NULL); }
+#define START_TIMER(timers_index, secs, nsecs) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.tv_nsec = 0; its.it_value.tv_sec = secs; its.it_value.tv_nsec = nsecs; timer_settime(*(timers[timers_index].timer_id), 0, &its, NULL); }
 #define STOP_TIMER(timers_index) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.tv_nsec = 0; its.it_value.tv_sec = 0; its.it_value.tv_nsec = 0; timer_settime(*(timers[timers_index].timer_id), 0, &its, NULL); timers[timers_index].assoc_with = -1; }
 #define FIND_TIMER(seq_num, index) for (index = 0; index < 4; index++) if (timers[index].assoc_with == seq_num) break;
 #define FIND_BLANK_TIMER(res) for (res = 0; res < 4; res++) if (timers[res].assoc_with == -1) break;
@@ -46,11 +47,60 @@ timer_t* ack_timer_id;
 #define BETWEEN(a, b, c) (((a <= b) && (b < c)) || ((c < a) && (a <= b)) || ((c < c) && (c < a)))
 
 // source code thanks to pycrc, modified to be used as ugly, ugly macro
-#define __CRC_REFLECT(ret, data, data_len) { unsigned int i; ret = data & 0x01; for (i = 1; i < data_len; i++) { data >>= 1; ret = (ret << 1) | (data & 0x01); } }
-#define __CRC_UPDATE(crc1, data, data_len) { unsigned char* crc = (unsigned char*)crc1; unsigned int i; bool bit; unsigned char c; while (data_len--) {  __CRC_REFLECT(c, *data++, 8);for (i = 0; i < 8; i++) { bit = crc & 0x8000; crc = (crc << 1) | ((c >> (7 - i)) & 0x01); if (bit) crc ^= 0x8005; }; crc &= 0xffff; }; crc1 = crc & 0xffff; }
-#define __CRC_FINALIZE(crc) { unsigned bit i; bool bit; for (i=0; i < 16; i++) { bit = crc & 0x8000; crc = (crc << 1) | 0x00; if (bit) crc ^= 0x8005; } short res = crc; __CRC_REFLECT(res, crc, 16); crc = (res ^ 0x0000) & 0xffff; }
+#define __CRC_REFLECT(ret, data, data_len) \
+{ \
+  ret = data & 0x01; \
+  for (unsigned int j = 1; j < data_len; j++) \
+  { \
+    data >>= 1; \
+    ret = (ret << 1) | (data & 0x01); \
+  } \
+}
+
+#define __CRC_UPDATE(crc, data, datalen) \
+{ \
+  bool bit; \
+  unsigned char c; \
+  unsigned int data_len = datalen; \
+  while (data_len--) \
+  { \
+    __CRC_REFLECT(c, *data++, 8); \
+    for (unsigned int i = 0; i < 8; i++) \
+    { \
+      bit = crc & 0x8000; \
+      crc = (crc << 1) | ((c >> (7 - i)) & 0x01); \
+      if (bit) crc ^= 0x8005; \
+    } \
+    crc &= 0xffff; \
+  } \
+  crc = crc & 0xffff; \
+}
+#define __CRC_FINALIZE(crc) \
+{ \
+  unsigned int i; \
+  bool bit; \
+  for (i=0; i < 16; i++) \
+  { \
+    bit = crc & 0x8000; \
+    crc = (crc << 1) | 0x00; \
+    if (bit) crc ^= 0x8005; \
+  } \
+  short res = crc; \
+  __CRC_REFLECT(res, crc, 16); \
+  crc = (res ^ 0x0000) & 0xffff; \
+}
+
 // -2 is so that crc bytes are not included in the crc
-#define MAKE_CRC(fr) { short crc; &crc = fr.crc; crc = 0x0000; __CRC_UPDATE(crc, &fr, sizeof(fr)-2); __CRC_FINALIZE(crc); }
+#define MAKE_CRC(fr) \
+{ \
+  short crc; \
+  crc = 0x0000; \
+  char* frp = (char*)&fr; \
+  __CRC_UPDATE(crc, frp, sizeof(fr)-2); \
+  __CRC_FINALIZE(crc); \
+  fr.crc[0] = *((char*)&crc); \
+  fr.crc[1] = *(((char*)&crc)+sizeof(char)); \
+}
 
 
 // make sure to only use signal safe functions in here!  Check signal(7) for more info
@@ -110,7 +160,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
           // reassemble packet from 2 frames
           packet_frame[recv_frame->end_of_packet]=true;
           //cool math that will offset the payload onto the packet based on the frame number without a check
-          ((150*recv_frame->end_of_packet)+ recv_frame->payload)temp_packet;
+          // line immediately below this does not work
+          //((150*recv_frame->end_of_packet)+ recv_frame->payload)temp_packet;
           
           //check to see if both halves have been sent in
           if(packet_frame[0] && packet_frame[1]){
@@ -124,7 +175,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
             v.sival_ptr = &temp_packet;
             sigqueue(app_layer_pid, SIG_NEW_FRAME, v);
             INC(frame_expected);
-            //need to clear the temp_packet
+            // need to clear the temp_packet
             temp_packet = 0;
             if (acks_needed = false)
             {
@@ -152,9 +203,9 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr1.seq_num = end_win_list->fr->seq_num;
     INC(fr1.seq_num);
     fr1.end_of_packet = 0;
-    INC_UPTO(packet_nums, 15);
-    fr1.packet_num = packet_nums;
-    memcpy(fr1.payload, recv_packet.payload, 150);
+    INC_UPTO(packet_num, 15);
+    fr1.packet_num = packet_num;
+    memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
 
     frame fr2;
@@ -162,9 +213,10 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr2.seq_num = fr1.seq_num;
     INC(fr2.seq_num);
     fr2.end_of_packet = 1;
-    fr2.packet_num = packet_nums;
-    memcpy(fr2.payload, recv_packet.payload+150, 106);
-    memcpy(fr2.payload+106, recv_packet.command_type, 2); // copy the remaining parts of the packet struct over
+    fr2.packet_num = packet_num;
+    memcpy(fr2.payload, recv_packet->payload+150, 106);
+    unsigned int ct = recv_packet->command_type;
+    memcpy(fr2.payload+106, &ct, 1); // copy the remaining parts of the packet struct over
     MAKE_CRC(fr2);
 
     num_buffered += 2;
@@ -179,7 +231,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     if (win_list == NULL) win_list = &win_elem1;
 
     window_element win_elem2;
-    win_elem2.fr = &fr;
+    win_elem2.fr = &fr2;
     win_elem2.prev = end_win_list;
     win_elem2.next = NULL;
     end_win_list->next = &win_elem2;
