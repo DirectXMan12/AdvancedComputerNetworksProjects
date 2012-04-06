@@ -18,8 +18,8 @@ unsigned int packet_num = 0;;
 unsigned int next_null_timer = 0;
 bool acks_needed = false;
 
-///potential variables to get two frames into the same packet
-char[] temp_packet = new char[300];
+// potential variables to get two frames into the same packet
+char* temp_packet = new char[300];
 bool packet_frame[] = {false, false};
 
 struct timer_info
@@ -31,13 +31,13 @@ struct timer_info
 struct timer_info timers[4];
 timer_t* ack_timer_id;
 
-#define START_TIMER(timers_index, secs, nsecs) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.it_nsec = 0; its.it_value.tv_sec = secs; its.it_value.tv_nsec = nsecs; its.it_interval = interval; its.it_value = val; timer_settime(*(timers[timers_index].timer_id), *its, NULL); }
-#define STOP_TIMER(timers_index) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.it_nsec = 0; its.it_value.tv_sec = 0; its.it_value.tv_nsec = 0; its.it_interval = interval; its.it_value = val; timer_settime(*(timers[timers_index].timer_id), *its, NULL); timers[timers_index].assoc_with = -1; }
+#define START_TIMER(timers_index, secs, nsecs) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.it_nsec = 0; its.it_value.tv_sec = secs; its.it_value.tv_nsec = nsecs; timer_settime(*(timers[timers_index].timer_id), 0, &its, NULL); }
+#define STOP_TIMER(timers_index) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.tv_nsec = 0; its.it_value.tv_sec = 0; its.it_value.tv_nsec = 0; timer_settime(*(timers[timers_index].timer_id), 0, &its, NULL); timers[timers_index].assoc_with = -1; }
 #define FIND_TIMER(seq_num, index) for (index = 0; index < 4; index++) if (timers[index].assoc_with == seq_num) break;
 #define FIND_BLANK_TIMER(res) for (res = 0; res < 4; res++) if (timers[res].assoc_with == -1) break;
 
-#define START_ACK_TIMER(secs, nsecs) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.it_nsec = 0; its.it_value.tv_sec = secs; its.it_value.tv_nsec = nsecs; its.it_interval = interval; its.it_value = val; timer_settime(ack_timer_id, *its, NULL); }
-#define STOP_ACK_TIMER { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.it_nsec = 0; its.it_value.tv_sec = 0; its.it_value.tv_nsec = 0; its.it_interval = interval; its.it_value = val; timer_settime(ack_timer_id, *its, NULL); }
+#define START_ACK_TIMER(secs, nsecs) { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.tv_nsec = 0; its.it_value.tv_sec = secs; its.it_value.tv_nsec = nsecs; timer_settime(ack_timer_id, 0, &its, NULL); }
+#define STOP_ACK_TIMER { itimerspec its; its.it_interval.tv_sec = 0; its.it_interval.tv_nsec = 0; its.it_value.tv_sec = 0; its.it_value.tv_nsec = 0; timer_settime(ack_timer_id, 0, &its, NULL); }
 
 #define INC(seq_n) (seq_n == 3 ? seq_n = 0 : seq_n++)
 #define INC_UPTO(seq_n, max) (seq_n == max ? seq_n = 0 : seq_n++)
@@ -82,7 +82,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         STOP_TIMER(timer_ind);
         // end stop timer code
         
-        struct win_list* old_f = win_list;
+        struct window_element* old_f = win_list;
         // move the sliding window
         win_list = win_list->next;
         // clear up the old frame 
@@ -93,11 +93,18 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     }
     else // otherwise this is an incoming data packet
     {
-      //check CRC
-      if (recv_frame->crc != MAKE_CRC(recv_frame)){//frame is corrupted
-        //send signal for checksum error
-         raise(SIG_CHECKSUM_ERR);
+      // check CRC
+      // in order to compare, we make a temporary copy of the frame,
+      // then run the crc on that, and then compare the resulting CRCs
+      struct frame temp_fr;
+      memcpy(&temp_fr, recv_frame, sizeof(struct frame));
+      MAKE_CRC(temp_fr);
+      if (temp_fr.crc[0] != recv_frame->crc[0] || temp_fr.crc[1] != recv_frame->crc[1]) // checksum err
+      {
+        // ignore frames with the error
+        return;
       }
+
       else if (recv_frame->seq_num == frame_expected) //crc checked out and the frame is ok
         {
           // reassemble packet from 2 frames
@@ -228,10 +235,6 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       acks_needed = false;
       STOP_ACK_TIMER;
     }
-  }
-  else if (signum == SIG_CHECKSUM_ERR)
-  {
-    // ignore invalid frames
   }
 
   if (num_buffered < 4) // if we can still buffer more

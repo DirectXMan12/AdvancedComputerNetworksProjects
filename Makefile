@@ -4,7 +4,7 @@ CFLAGS = -lrt -g
 OUTPUT = prog1
 
 main:
-	$(CC) $(SOURCES) $(CFLAGS) -o $(OUTPUT)
+	$(CC) $(SOURCES) $(CFLAGS) -I . -o $(OUTPUT)
 
 clean:
 	rm $(OUTPUT)
