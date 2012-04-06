@@ -208,6 +208,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr1.packet_num = packet_num;
     memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
+    num_buffered += 1;
     
     //checking if the packet needs a second frame
     if((int)(recv_packet->pl_data_len)<=148){
@@ -224,8 +225,9 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       //sets both frames to say that there should be 2 frames
       fr1.split_packet = 1;
       fr2.split_packet = 1;
+      num_buffered += 1;
     }
-    num_buffered += 2;
+    
 
     window_element win_elem1;
     win_elem1.fr = &fr1;
