@@ -19,11 +19,11 @@ class PhysicalLayer
     // dp: pid of the data link layer PID
     // is: is this a server physical layer?
     PhysicalLayer(pid_t dp, bool is);
-    int init_connection( const char* client_name, const char* server_name);
+    int init_connection( const char* client_name, const char* server_name, bool is_comm_process);
     int tcp_sock;
 
   private:
-    void acceptAsServer();
+    void acceptAsServer(bool is_comm_process);
     bool is_server;
     int ipc_sock;
     struct sockaddr_un* ipc_addr;

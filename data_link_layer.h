@@ -5,6 +5,6 @@
 #define __DATA_LINK_LAYER__
 
 void handle_signals(int signum, siginfo_t* info, void* context);
-void init_data_link_layer(bool is_server, pid_t app_layer);
+void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process, int comm_sock);
 
 #endif

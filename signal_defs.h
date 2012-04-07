@@ -6,8 +6,9 @@
 #define SIG_NEW_PACKET    SIGRTMIN+5
 #define SIG_CHECKSUM_ERR  SIGRTMIN+6
 #define SIG_FLOW_ON       SIGRTMIN+7
+#define SIG_NEW_CLIENT    SIGRTMIN+8
 
 // use create_timer to create these timers
-#define SIG_TIMER_ELAPSED SIGRTMIN+8
+#define SIG_TIMER_ELAPSED SIGRTMIN+9
 
 #endif

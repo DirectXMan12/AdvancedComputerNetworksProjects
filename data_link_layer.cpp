@@ -4,11 +4,13 @@
 #include "physical_layer.h"
 #include "err_macros.h"
 #include "sys/wait.h"
+#include "sys/prctl.h"
+#include "stdlib.h"
 
-#define TIMER_SECS 1
+#define TIMER_SECS 10
 #define TIMER_NSECS 0
-#define ACK_SECS 1
-#define ACK_NSECS 50000
+#define ACK_SECS 5
+#define ACK_NSECS 0
 
 pid_t phys_layer_pid;
 pid_t app_layer_pid;
@@ -123,10 +125,12 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     // collect it from the signal value
     recv_frame = (frame*)info->si_value.sival_ptr;
 
-    if (recv_frame->is_ack) // this is an ack packet
+    if (recv_frame->is_ack == 1) // this is an ack packet
     {
+      POST_INFO("DATA_LINK_LAYER: got ack!");
       unsigned int last_seq = 0;
       struct window_element* last_frame = win_list;
+      
       for (unsigned int i = win_list->fr->seq_num; BETWEEN(win_list->fr->seq_num, i, recv_frame->seq_num); INC(i))
       {
         // begin stop timer code
@@ -149,12 +153,14 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       // check CRC
       // in order to compare, we make a temporary copy of the frame,
       // then run the crc on that, and then compare the resulting CRCs
+      POST_INFO("new incoming frame!");
       struct frame temp_fr;
       memcpy(&temp_fr, recv_frame, sizeof(struct frame));
       MAKE_CRC(temp_fr);
       if (temp_fr.crc[0] != recv_frame->crc[0] || temp_fr.crc[1] != recv_frame->crc[1]) // checksum err
       {
         // ignore frames with the error
+        POST_WARN("invalid CRC: should be " << (short)temp_fr.crc[0] << (short)temp_fr.crc[1] << ", but was " << (short)recv_frame->crc[0] << (short)recv_frame->crc[1]);
         return;
       }
 
@@ -180,7 +186,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
             INC(frame_expected);
             // need to clear the temp_packet
             temp_packet = 0;
-            if (acks_needed = false)
+            POST_INFO(acks_needed);
+            if (acks_needed == false)
             {
               acks_needed = true;
               START_ACK_TIMER(ACK_SECS, ACK_NSECS);
@@ -204,9 +211,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     // this code initializes two frames and splits the packet over them
     frame fr1;
     fr1.is_ack = 0;
-    // TODO: 
-    //fr1.seq_num = end_win_list->fr->seq_num;
-    fr1.seq_num = 2;
+    if (end_win_list != NULL) fr1.seq_num = end_win_list->fr->seq_num;
+    else fr1.seq_num = 0;
     fr1.split_packet = 0;
     INC(fr1.seq_num);
     fr1.end_of_packet = 0;
@@ -260,6 +266,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     sigval v1;
     v1.sival_ptr = &fr1;
     POST_INFO("signaling phys layer at " << phys_layer_pid << " with signal " << SIG_NEW_FRAME);
+    POST_INFO(fr1.is_ack);
     sigqueue(phys_layer_pid, SIG_NEW_FRAME, v1);
     int tv1 = 0;
     FIND_BLANK_TIMER(tv1);
@@ -270,6 +277,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     {
       sigval v2;
       v2.sival_ptr = fr2q;
+      POST_INFO(fr2q->is_ack);
       sigqueue(phys_layer_pid, SIG_NEW_FRAME, v2);
       int tv2 = 0;
       FIND_BLANK_TIMER(tv2);
@@ -297,6 +305,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         // increment the next one that we will send
         we = we->next;
       }
+      POST_INFO("resent frames");
     }
     else // this is an ack timer timeout
     {
@@ -310,6 +319,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
       acks_needed = false;
       STOP_ACK_TIMER;
+      POST_INFO("sent acks");
     }
   }
   else if (signum == SIG_FLOW_ON) // we are ready to go (from phys layer)
@@ -317,6 +327,15 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     sigval v;
     v.sival_int = 1; // turn flow on
     sigqueue(app_layer_pid, SIG_FLOW_ON, v);
+  }
+  else if (signum == SIG_NEW_CLIENT)
+  {
+    sigqueue(app_layer_pid, SIG_NEW_CLIENT, info->si_value);
+  }
+  else if (signum == SIGSEGV)
+  {
+    POST_ERR("Segfault!");
+    exit(2);
   }
 
 
@@ -334,7 +353,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
   }
 }
 
-void init_data_link_layer(bool is_server, pid_t app_layer)
+void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process, int comm_sock)
 {
   struct sigaction act;
   act.sa_sigaction = &handle_signals;
@@ -345,6 +364,8 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
   sigaction(SIG_NEW_PACKET, &act, 0);
   sigaction(SIG_TIMER_ELAPSED, &act, 0);
   sigaction(SIG_FLOW_ON, &act, 0);
+  sigaction(SIG_NEW_CLIENT, &act, 0);
+  sigaction(SIGSEGV, &act, 0);
 
   app_layer_pid = app_layer;
 
@@ -365,6 +386,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
   for (int i = 0; i < 4; i++)
   {
     timers[i].timer_id = new timer_t;
+    timers[i].assoc_with = -1;
     if (timer_create(CLOCK_MONOTONIC, &notify_method, timers[i].timer_id) < 0)
     {
       POST_ERR("Issue initializing timers");
@@ -384,14 +406,24 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
 
   if (phys_layer_pid == 0) // this will become the physical layer
   {
+    if(is_server) prctl(PR_SET_NAME, (unsigned long) "prog1s_ps", 0, 0, 0);
+    else prctl(PR_SET_NAME, (unsigned long) "prog1s_ps", 0, 0, 0);
+
     PhysicalLayer p(my_pid, is_server);
     if (is_server)
     {
-      p.init_connection(0, 0);
+      if (!is_comm_process)
+      { 
+        p.init_connection(0, 0, is_comm_process);
+      }
+      else
+      {
+        p.init_connection(0, (char*) &comm_sock, is_comm_process);
+      }
     }
     else
     {
-      p.init_connection("client a", "localhost");
+      p.init_connection("client a", "localhost", is_comm_process);
     }
   }
 
