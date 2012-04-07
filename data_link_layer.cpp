@@ -114,6 +114,7 @@ timer_t* ack_timer_id;
 //  - deal with reassembling packets from split frames(done unless we convert the packet to only send as many frames as needed)
 void handle_signals(int signum, siginfo_t* info, void* context)
 {
+  POST_INFO("DATA_LINK_LAYER: got signal " << signum);
   if(signum == SIG_NEW_FRAME)
   {
     // we got a new frame from the physical layer
@@ -191,6 +192,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
   }
   else if(signum == SIG_NEW_PACKET)
   { 
+    POST_INFO("new packet");
     // we got a new packet from the app layer!
     struct packet* recv_packet;
     recv_packet = (packet*)info->si_value.sival_ptr;
@@ -201,7 +203,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     // this code initializes two frames and splits the packet over them
     frame fr1;
     fr1.is_ack = 0;
-    fr1.seq_num = end_win_list->fr->seq_num;
+    //fr1.seq_num = end_win_list->fr->seq_num;
+    fr1.seq_num = 2;
     fr1.split_packet = 0;
     INC(fr1.seq_num);
     fr1.end_of_packet = 0;
@@ -214,7 +217,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     frame *fr2q = NULL;
     
     //checking if the packet needs a second frame
-    if((int)(recv_packet->pl_data_len)<=148)
+    POST_INFO("fr1a");
+    if(recv_packet->pl_data_len > 148)
     {
       frame fr2;
       fr2.is_ack = 0;
@@ -232,6 +236,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       num_buffered += 1;
       fr2q = &fr2;
     }
+    POST_INFO("fr1b");
     
 
     window_element win_elem1;
@@ -255,6 +260,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
     sigval v1;
     v1.sival_ptr = &fr1;
+    POST_INFO("signaling phys layer at " << phys_layer_pid << " with signal " << SIG_NEW_FRAME);
     sigqueue(phys_layer_pid, SIG_NEW_FRAME, v1);
     int tv1 = 0;
     FIND_BLANK_TIMER(tv1);
@@ -345,8 +351,6 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
 
   pid_t my_pid = getpid();
   phys_layer_pid = fork();
-  POST_INFO("phys_layer_pid");
-  POST_INFO(phys_layer_pid);
 
   win_list = NULL;
   frame_expected = 0;

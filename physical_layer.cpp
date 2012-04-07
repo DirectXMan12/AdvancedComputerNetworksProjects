@@ -11,7 +11,7 @@ PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
 
 void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
 {
-
+  POST_INFO("PHYS_LAYER: got signal" << signum);
   struct frame* fts;
   fts = (frame*)info->si_value.sival_ptr;
 
