@@ -204,6 +204,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     // this code initializes two frames and splits the packet over them
     frame fr1;
     fr1.is_ack = 0;
+    // TODO: 
     //fr1.seq_num = end_win_list->fr->seq_num;
     fr1.seq_num = 2;
     fr1.split_packet = 0;
@@ -213,56 +214,6 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr1.packet_num = packet_num;
     memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
-    /*{
-      short crc;
-      crc = 0x0000;
-      char* frp = (char*)&fr1;
-      { 
-        bool bit;
-        unsigned char c;
-        unsigned int data_len = sizeof(fr1)-2;
-        while (data_len--)
-        { 
-          {
-            c = *frp++ & 0x01;
-            for (unsigned int j = 1; j < 8; j++)
-            {
-              *frp++ >>= 1;
-              c = (c << 1) | (*frp++ & 0x01);
-            }
-          };
-          for (unsigned int i = 0; i < 8; i++)
-          {
-            bit = crc & 0x8000; 
-            crc = (crc << 1) | ((c >> (7 - i)) & 0x01);
-            if (bit) crc ^= 0x8005;
-          } 
-          crc &= 0xffff;
-        } 
-        crc = crc & 0xffff;
-      };
-      { 
-        unsigned int i;
-        bool bit;
-        for (i=0; i < 16; i++)
-        { 
-          bit = crc & 0x8000;
-          crc = (crc << 1) | 0x00;
-          if (bit) crc ^= 0x8005;
-        }
-        short res = crc;
-        { 
-          res = crc & 0x01;
-          for (unsigned int j = 1; j < 16; j++)
-          {
-            crc >>= 1;
-            res = (res << 1) | (crc & 0x01);
-          }
-        };
-        crc = (res ^ 0x0000) & 0xffff;
-      };
-      fr1.crc[0] = *((char*)&crc); fr1.crc[1] = *(((char*)&crc)+sizeof(char));
-    };*/
     num_buffered += 1;
 
     frame *fr2q = NULL;
@@ -286,14 +237,12 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       num_buffered += 1;
       fr2q = &fr2;
     }
-    POST_INFO("fr1c");
-    
 
     window_element win_elem1;
     win_elem1.fr = &fr1;
     win_elem1.prev = end_win_list;
     win_elem1.next = NULL;
-    end_win_list->next = &win_elem1;
+    if (end_win_list != NULL) end_win_list->next = &win_elem1;
     end_win_list = &win_elem1;
 
     if (win_list == NULL) win_list = &win_elem1;
