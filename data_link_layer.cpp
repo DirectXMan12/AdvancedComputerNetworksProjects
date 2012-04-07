@@ -361,6 +361,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
 
   for (int i = 0; i < 4; i++)
   {
+    timers[i].timer_id = new timer_t;
     if (timer_create(CLOCK_MONOTONIC, &notify_method, timers[i].timer_id) < 0)
     {
       POST_ERR("Issue initializing timers");
@@ -372,6 +373,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
   notify_ack.sigev_notify = SIGEV_SIGNAL;
   notify_ack.sigev_value.sival_int = 1; // this is the ack timer
 
+  ack_timer_id = new timer_t;
   if (timer_create(CLOCK_MONOTONIC, &notify_ack, ack_timer_id) < 0)
   {
     POST_ERR("Issue initializing ack timer");
