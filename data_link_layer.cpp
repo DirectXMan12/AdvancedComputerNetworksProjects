@@ -65,7 +65,8 @@ timer_t* ack_timer_id;
   unsigned int data_len = datalen; \
   while (data_len--) \
   { \
-    __CRC_REFLECT(c, *data++, 8); \
+    data++; \
+    __CRC_REFLECT(c, (*data), 8); \
     for (unsigned int i = 0; i < 8; i++) \
     { \
       bit = crc & 0x8000; \
@@ -212,12 +213,61 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr1.packet_num = packet_num;
     memcpy(fr1.payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
+    /*{
+      short crc;
+      crc = 0x0000;
+      char* frp = (char*)&fr1;
+      { 
+        bool bit;
+        unsigned char c;
+        unsigned int data_len = sizeof(fr1)-2;
+        while (data_len--)
+        { 
+          {
+            c = *frp++ & 0x01;
+            for (unsigned int j = 1; j < 8; j++)
+            {
+              *frp++ >>= 1;
+              c = (c << 1) | (*frp++ & 0x01);
+            }
+          };
+          for (unsigned int i = 0; i < 8; i++)
+          {
+            bit = crc & 0x8000; 
+            crc = (crc << 1) | ((c >> (7 - i)) & 0x01);
+            if (bit) crc ^= 0x8005;
+          } 
+          crc &= 0xffff;
+        } 
+        crc = crc & 0xffff;
+      };
+      { 
+        unsigned int i;
+        bool bit;
+        for (i=0; i < 16; i++)
+        { 
+          bit = crc & 0x8000;
+          crc = (crc << 1) | 0x00;
+          if (bit) crc ^= 0x8005;
+        }
+        short res = crc;
+        { 
+          res = crc & 0x01;
+          for (unsigned int j = 1; j < 16; j++)
+          {
+            crc >>= 1;
+            res = (res << 1) | (crc & 0x01);
+          }
+        };
+        crc = (res ^ 0x0000) & 0xffff;
+      };
+      fr1.crc[0] = *((char*)&crc); fr1.crc[1] = *(((char*)&crc)+sizeof(char));
+    };*/
     num_buffered += 1;
 
     frame *fr2q = NULL;
     
     //checking if the packet needs a second frame
-    POST_INFO("fr1a");
     if(recv_packet->pl_data_len > 148)
     {
       frame fr2;
@@ -236,7 +286,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       num_buffered += 1;
       fr2q = &fr2;
     }
-    POST_INFO("fr1b");
+    POST_INFO("fr1c");
     
 
     window_element win_elem1;
