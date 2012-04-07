@@ -307,6 +307,13 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       STOP_ACK_TIMER;
     }
   }
+  else if (signum == SIG_FLOW_ON) // we are ready to go (from phys layer)
+  {
+    sigval v;
+    v.sival_int = 1; // turn flow on
+    sigqueue(app_layer_pid, SIG_FLOW_ON, v);
+  }
+
 
   if (num_buffered < 4) // if we can still buffer more
   {
@@ -332,6 +339,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer)
   sigaction(SIG_NEW_FRAME, &act, 0);
   sigaction(SIG_NEW_PACKET, &act, 0);
   sigaction(SIG_TIMER_ELAPSED, &act, 0);
+  sigaction(SIG_FLOW_ON, &act, 0);
 
   app_layer_pid = app_layer;
 

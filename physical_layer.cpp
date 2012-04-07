@@ -89,6 +89,18 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     msg+= client_name;
     msg+= "::";
     write(this->tcp_sock, msg.c_str(), sizeof(msg.c_str()));
+
+    phys_obj = this;
+    
+    struct sigaction act;
+    act.sa_sigaction = &handle_phys_layer_signals;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = SA_SIGINFO;
+    sigaction(SIG_NEW_FRAME, &act, NULL);
+
+    sigval v;
+    v.sival_int = 1; // tell the dll that we are ready
+    sigqueue(this->dll_pid, SIG_FLOW_ON, v);
   }
   else // otherwise we must be a server
   {
@@ -114,16 +126,21 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
       return -2;
     }
 
+    phys_obj = this;
+    
+    struct sigaction act;
+    act.sa_sigaction = &handle_phys_layer_signals;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = SA_SIGINFO;
+    sigaction(SIG_NEW_FRAME, &act, NULL);
+    
+    sigval v;
+    v.sival_int = 1; // tell the dll that we are ready
+    sigqueue(this->dll_pid, SIG_FLOW_ON, v);
+
     this->acceptAsServer();
   }
 
-  phys_obj = this;
-  
-  struct sigaction act;
-  act.sa_sigaction = &handle_phys_layer_signals;
-  sigemptyset(&act.sa_mask);
-  act.sa_flags = SA_SIGINFO;
-  sigaction(SIG_NEW_FRAME, &act, NULL);
   return 0;
 }
 

@@ -22,6 +22,11 @@ void send_a_test_packet()
 void handle_app_signals(int signum, siginfo_t* info, void* context)
 {
   POST_INFO("I like cereal!");
+  if (signum == SIG_FLOW_ON)
+  {
+    POST_INFO("flow on now!");
+    send_a_test_packet(); // NOTE: shouldn't be calling an external function from here unless we make it async-safe
+  }
 }
 
 int main(int argc, char* argv[])
@@ -33,14 +38,15 @@ int main(int argc, char* argv[])
   else POST_INFO("we are a client");
 
   dll_pid = fork();
-  POST_INFO("dll_pid: ");
-  POST_INFO(dll_pid);
-  if(dll_pid <0){//failed to fork
+  POST_INFO("dll_pid: " << dll_pid);
+  if(dll_pid < 0)
+  {
+    //failed to fork
 	  POST_ERR("Failed to Fork");
   }
   else if (dll_pid == 0) // we are the child
   {
-	POST_INFO("Calling init_data_link_layer");
+    POST_INFO("Calling init_data_link_layer");
     init_data_link_layer(argv[1][0] == '1', my_pid);
   }
   else
@@ -52,9 +58,11 @@ int main(int argc, char* argv[])
 
     sigaction(SIG_NEW_PACKET, &act, 0);
     sigaction(SIG_FLOW_ON, &act, 0);
+
+    POST_INFO("Sending a Test Packet");
+//    send_a_test_packet();
   }
-  POST_INFO("Sending a Test Packet");
-  send_a_test_packet();
+
 
   while(1) waitpid(-1, 0, 0);
 }
