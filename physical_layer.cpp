@@ -15,20 +15,23 @@ PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
 
 void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
 {
-  POST_INFO("PHYS_LAYER: got signal" << signum);
+  POST_INFO("PHYSICAL_LAYER: Got signal " << signum);
   if (signum == SIGSEGV)
   {
-    POST_ERR("Segfault!");
+    POST_ERR("PHYSICAL_LAYER: Segfault!");
     exit(2);
   }
-  struct frame* fts;
-  fts = (frame*)info->si_value.sival_ptr;
+
+  SHM_GRAB(struct frame, fts, (info->si_value.sival_int));
 
   // TODO: do random error stuff in Data Link Layer
+  POST_INFO("is ack: " << fts->payload[0]);
 
   // send the frame on its merry way
   write(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame));
   POST_INFO("PHYSICAL_LAYER: sent data on socket " << phys_obj->tcp_sock);
+  SHM_RELEASE(struct frame, fts);
+  SHM_DESTROY((info->si_value.sival_int));
 }
 
 int PhysicalLayer::init_connection(const char* client_name, const char* server_name, bool is_comm_process)
@@ -53,7 +56,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     int lookup_res = getaddrinfo(server_name, "8675", &server_addr_hints, &server_addr);
     if (lookup_res < 0)
     {
-      POST_ERR("issue resolving server name \"" << server_name << "\" to address: " << gai_strerror(lookup_res));
+      POST_ERR("PHYSICAL_LAYER: Issue resolving server name \"" << server_name << "\" to address: " << gai_strerror(lookup_res));
       return -1;
     }
    
@@ -67,7 +70,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
 
       if (this->tcp_sock < 0)
       {
-        POST_ERR("unable to allocate a socket");
+        POST_ERR("PHYSICAL_LAYER: Unable to allocate a socket");
         return -2;
       }
 
@@ -81,14 +84,14 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
       else
       {
         // if we fail at connecting to this result address, close the socket and try again on a new socket with the next result address
-        POST_WARN("Couldn't bind to one of the returned address: " << strerror(errno));
+        POST_WARN("PHYSICAL_LAYER: Couldn't bind to one of the returned address: " << strerror(errno));
         close(this->tcp_sock);
       } 
     } 
 
     if (!success)
     {
-        POST_ERR("could not bind socket to any of the addresses to which the specified server name resolved");
+        POST_ERR("PHYSICAL_LAYER: Could not bind socket to any of the addresses to which the specified server name resolved");
         return -2;
     }
 
@@ -105,13 +108,14 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     struct sigaction act;
     act.sa_sigaction = &handle_phys_layer_signals;
     sigemptyset(&act.sa_mask);
-    act.sa_flags = SA_SIGINFO;
+    act.sa_flags = SA_SIGINFO | SA_RESTART;
     sigaction(SIG_NEW_FRAME, &act, NULL);
     sigaction(SIGSEGV, &act, NULL);
 
     sigval v;
     v.sival_int = 1; // tell the dll that we are ready
     sigqueue(this->dll_pid, SIG_FLOW_ON, v);
+    this->readAsClient();
   }
   else // otherwise we must be a server
   {
@@ -128,14 +132,14 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
       // bind to any address (as specified above)
       if (bind(this->tcp_sock, (const sockaddr*) &server_addr, sizeof(server_addr)) < 0)
       {
-        POST_ERR("issue binding socket)");
+        POST_ERR("PHYSICAL_LAYER: Issue binding socket: " << strerror(errno));
         return -1;
       }
 
       // and listen (but not accept yet)
       if (listen(this->tcp_sock, 5) < 0)
       {
-        POST_ERR("issue listening on socket");
+        POST_ERR("PHYSICAL_LAYER: Issue listening on socket: " << strerror(errno));
         return -2;
       }
     }
@@ -144,22 +148,50 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
       this->tcp_sock = *((int*)server_name); // just pass the socket as the server name
     }
 
-      phys_obj = this;
-      
-      struct sigaction act;
-      act.sa_sigaction = &handle_phys_layer_signals;
-      sigemptyset(&act.sa_mask);
-      act.sa_flags = SA_SIGINFO;
-      sigaction(SIG_NEW_FRAME, &act, NULL);
-      
-      sigval v;
-      v.sival_int = 1; // tell the dll that we are ready
-      sigqueue(this->dll_pid, SIG_FLOW_ON, v);
+    phys_obj = this;
+    
+    struct sigaction act;
+    act.sa_sigaction = &handle_phys_layer_signals;
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = SA_SIGINFO | SA_RESTART;
+    sigaction(SIG_NEW_FRAME, &act, NULL);
+    
+    sigval v;
+    v.sival_int = 1; // tell the dll that we are ready
+    sigqueue(this->dll_pid, SIG_FLOW_ON, v);
 
     this->acceptAsServer(is_comm_process);
   }
 
   return 0;
+}
+
+void PhysicalLayer::readAsClient()
+{
+  POST_INFO("PHYSICAL_LAYER: Listening as client...");
+  char buff[sizeof(struct frame)];
+  while(1)
+  {
+    int r = read(this->tcp_sock, buff, sizeof(struct frame));
+    if (r < 0)
+    {
+      POST_ERR("PHYSICAL_LAYER: Issue reading from socket: " << strerror(errno));
+      break;
+    }
+    else if (r == 0)
+    {
+      POST_WARN("PHYSICAL_LAYER: socket closed...");
+      // TODO: send a signal to this effect
+      break;
+    }
+    POST_INFO("PHYSICAL_LAYER: read " << r << " bytes of data...");
+    SHM_GRAB_NEW(struct frame, fts, frid);
+    memcpy(fts, buff, sizeof(struct frame));
+    sigval v;
+    v.sival_int = frid;
+    sigqueue(this->dll_pid, SIG_NEW_FRAME, v);
+    SHM_RELEASE(struct frame, fts);
+  }
 }
 
 
@@ -175,7 +207,7 @@ void PhysicalLayer::acceptAsServer(bool is_comm_process)
       int r = read(this->tcp_sock, buff, sizeof(struct frame));
       if (r < 0)
       {
-        POST_ERR(strerror(errno));
+        POST_ERR("PHYSICAL_LAYER: Issue reading from socket: " << strerror(errno));
         break;
       }
       else if (r == 0)
@@ -184,9 +216,11 @@ void PhysicalLayer::acceptAsServer(bool is_comm_process)
         // TODO: send a signal to this effect
         break;
       }
-      POST_INFO("PHYSICAL_LAYER: read " << r << "bytes of data...");
+      POST_INFO("PHYSICAL_LAYER: read " << r << " bytes of data...");
+      SHM_GRAB_NEW(struct frame, fts, frid);
+      memcpy(fts, buff, sizeof(struct frame));
       sigval v;
-      v.sival_ptr = buff;
+      v.sival_int = frid;
       sigqueue(this->dll_pid, SIG_NEW_FRAME, v);
     }
   }
@@ -206,7 +240,7 @@ void PhysicalLayer::acceptAsServer(bool is_comm_process)
 
       char client_info[29];
       read(client_sock, client_info, 29);
-      POST_INFO("client '" << client_info << "' connected!");
+      POST_INFO("PHYSICAL_LAYER: Client '" << client_info << "' connected!");
       transferfdto(client_sock, "./sock_fdtrans"); 
     }
   }

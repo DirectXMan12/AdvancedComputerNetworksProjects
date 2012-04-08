@@ -24,6 +24,7 @@ class PhysicalLayer
 
   private:
     void acceptAsServer(bool is_comm_process);
+    void readAsClient();
     bool is_server;
     int ipc_sock;
     struct sockaddr_un* ipc_addr;

@@ -23,7 +23,7 @@ void fork_to_new_client(int comm_sock)
     if(dll_pid < 0)
     {
       //failed to fork
-      POST_ERR("Failed to Fork");
+      POST_ERR("APPLICATION_LAYER: Failed to fork off data link layer...");
     }
     else if (dll_pid == 0) // we are the child
     {
@@ -36,7 +36,7 @@ void fork_to_new_client(int comm_sock)
       struct sigaction act;
       act.sa_sigaction = &handle_app_signals;
       sigemptyset(&act.sa_mask);
-      act.sa_flags = SA_SIGINFO;
+      act.sa_flags = SA_SIGINFO | SA_RESTART;
 
       sigaction(SIG_NEW_PACKET, &act, 0);
       sigaction(SIG_FLOW_ON, &act, 0);
@@ -49,22 +49,24 @@ void fork_to_new_client(int comm_sock)
 
 void send_a_test_packet()
 {
-  packet p;
-  p.payload[0] = 'h';
-  p.payload[1] = 'i';
-  p.payload[2] = '!';
-  p.command_type = 0;
-  p.pl_data_len = 3;
-  p.seq_num = 0;
+  SHM_GRAB_NEW(struct packet, p, packetid);
+  p->payload[0] = 'h';
+  p->payload[1] = 'i';
+  p->payload[2] = '!';
+  p->command_type = 0;
+  p->pl_data_len = 3;
+  p->seq_num = 0;
+
   sigval v;
-  v.sival_ptr = &p;
+  v.sival_int = packetid;
   POST_INFO("APP_LAYER: sending new test packet");
   sigqueue(dll_pid, SIG_NEW_PACKET, v);
+  SHM_RELEASE(struct packet, p);
 }
 
 void handle_app_signals(int signum, siginfo_t* info, void* context)
 {
-  POST_INFO("APP_LAYER: got signal " << signum);
+  //POST_INFO("APP_LAYER: got signal " << signum);
   if (signum == SIG_FLOW_ON && !already_sent && !is_server)
   {
     already_sent = true;
@@ -72,8 +74,15 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   }
   else if (signum == SIG_NEW_CLIENT)
   {
-    POST_INFO("New client on socket " << info->si_value.sival_int << ", forking");
+    POST_INFO("APPLICATION_LAYER: New client on socket " << info->si_value.sival_int << ", forking new stack...");
     fork_to_new_client(info->si_value.sival_int);
+  }
+  else if (signum == SIG_NEW_PACKET)
+  {
+    SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
+    // do some stuff, memcpy
+    SHM_RELEASE(struct packet, pack); 
+    SHM_DESTROY((info->si_value.sival_int));
   }
 }
 
@@ -84,16 +93,16 @@ int main(int argc, char* argv[])
   // TODO: see if we actually have an argument
   if (argv[1][0] == '1')
   {
-    POST_INFO("we are a server");
+    POST_INFO("APPLICATION_LAYER: We are a server");
     is_server = true;
   }
-  else POST_INFO("we are a client");
+  else POST_INFO("APPLICATION_LAYER: We are a client");
 
   dll_pid = fork();
   if(dll_pid < 0)
   {
     //failed to fork
-	  POST_ERR("Failed to Fork");
+    POST_ERR("APPLICATION_LAYER: Failed to fork off data link layer...");
   }
   else if (dll_pid == 0) // we are the child
   {
@@ -106,7 +115,7 @@ int main(int argc, char* argv[])
     struct sigaction act;
     act.sa_sigaction = &handle_app_signals;
     sigemptyset(&act.sa_mask);
-    act.sa_flags = SA_SIGINFO;
+    act.sa_flags = SA_SIGINFO | SA_RESTART;
 
     sigaction(SIG_NEW_PACKET, &act, 0);
     sigaction(SIG_FLOW_ON, &act, 0);
