@@ -72,6 +72,7 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   }
   else if (signum == SIG_NEW_CLIENT)
   {
+    POST_INFO("New client on socket " << info->si_value.sival_int << ", forking");
     fork_to_new_client(info->si_value.sival_int);
   }
 }

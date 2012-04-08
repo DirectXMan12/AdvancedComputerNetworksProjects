@@ -418,6 +418,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process,
       }
       else
       {
+        POST_INFO("is comm process init");
         p.init_connection(0, (char*) &comm_sock, is_comm_process);
       }
     }

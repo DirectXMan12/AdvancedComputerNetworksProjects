@@ -1,6 +1,9 @@
 #include "physical_layer.h"
 #include "err_macros.h"
 #include "stdlib.h"
+#include <string.h>
+#include <errno.h>
+#include "sendfd.h"
 
 PhysicalLayer* phys_obj;
 
@@ -24,7 +27,8 @@ void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
   // TODO: do random error stuff in Data Link Layer
 
   // send the frame on its merry way
-  send(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame), 0);
+  write(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame));
+  POST_INFO("PHYSICAL_LAYER: sent data on socket " << phys_obj->tcp_sock);
 }
 
 int PhysicalLayer::init_connection(const char* client_name, const char* server_name, bool is_comm_process)
@@ -94,7 +98,7 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
     std::string msg = "PHYS_LAYER_CLIENT::";
     msg+= client_name;
     msg+= "::";
-    write(this->tcp_sock, msg.c_str(), sizeof(msg.c_str()));
+    write(this->tcp_sock, msg.c_str(), msg.length());
 
     phys_obj = this;
     
@@ -161,12 +165,26 @@ int PhysicalLayer::init_connection(const char* client_name, const char* server_n
 
 void PhysicalLayer::acceptAsServer(bool is_comm_process)
 {
-
   if (is_comm_process)
   {
-    char buff[153];
-    while(read(this->tcp_sock, buff, 153) > -1)
+    this->tcp_sock = transferfdfrom("./sock_fdtrans");
+    POST_INFO("PHYSICAL_LAYER: awaiting packets from socket " << this->tcp_sock);
+    char buff[sizeof(struct frame)];
+    while(1)
     {
+      int r = read(this->tcp_sock, buff, sizeof(struct frame));
+      if (r < 0)
+      {
+        POST_ERR(strerror(errno));
+        break;
+      }
+      else if (r == 0)
+      {
+        POST_WARN("PHYSICAL_LAYER: socket closed...");
+        // TODO: send a signal to this effect
+        break;
+      }
+      POST_INFO("PHYSICAL_LAYER: read " << r << "bytes of data...");
       sigval v;
       v.sival_ptr = buff;
       sigqueue(this->dll_pid, SIG_NEW_FRAME, v);
@@ -176,7 +194,7 @@ void PhysicalLayer::acceptAsServer(bool is_comm_process)
   {
     while(1)
     { 
-      POST_INFO("PHYSICAL LAYER: listening...");
+      POST_INFO("PHYSICAL LAYER: listening for clients on socket " << this->tcp_sock);
       struct sockaddr_in client_addr;
       socklen_t client_size = sizeof(client_addr);
       int client_sock = accept(this->tcp_sock, (sockaddr*) &client_addr, &client_size);
@@ -189,6 +207,7 @@ void PhysicalLayer::acceptAsServer(bool is_comm_process)
       char client_info[29];
       read(client_sock, client_info, 29);
       POST_INFO("client '" << client_info << "' connected!");
+      transferfdto(client_sock, "./sock_fdtrans"); 
     }
   }
 }
