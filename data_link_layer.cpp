@@ -6,6 +6,11 @@
 #include "sys/wait.h"
 #include "sys/prctl.h"
 #include "stdlib.h"
+#include <iostream>
+#include <iomanip>
+#include <stdio.h>
+
+using namespace std;
 
 #define TIMER_SECS 10
 #define TIMER_NSECS 0
@@ -34,6 +39,8 @@ struct timer_info
 
 struct timer_info timers[4];
 timer_t* ack_timer_id;
+
+#define PRINT_FRAME(f) cout << "{ is_ack: " << f->is_ack << ", seq_num: " << f->seq_num << ", split_packet: " << f->split_packet << ", end_of_packet: " << f->end_of_packet << ", packet_num: " << f->packet_num << "payload: '"; for(int i = 0; i < 150; i++) printf("%x", f->payload[i]); cout << "', crc: "; printf("%hhx%hhx", f->crc[0], f->crc[1]); cout << " }" << endl;
 
 #define START_TIMER(timers_index, secs, nsecs) \
 { \
@@ -138,11 +145,11 @@ timer_t* ack_timer_id;
 { \
   unsigned short crc; \
   crc = 0x0000; \
-  unsigned char* frp = (unsigned char*)&fr; \
-  __CRC_UPDATE(crc, frp, sizeof(fr)-2); \
+  unsigned char* frp = (unsigned char*)fr; \
+  __CRC_UPDATE(crc, frp, sizeof(fr)-2*sizeof(char)); \
   __CRC_FINALIZE(crc); \
-  fr.crc[0] = *((char*)&crc); \
-  fr.crc[1] = *(((char*)&crc)+sizeof(char)); \
+  fr->crc[0] = *((char*)&crc); \
+  fr->crc[1] = *(((char*)&crc)+sizeof(char)); \
 }
 
 
@@ -192,13 +199,15 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       // in order to compare, we make a temporary copy of the frame,
       // then run the crc on that, and then compare the resulting CRCs
       POST_INFO("DATA_LINK_LAYER: new incoming frame!");
-      struct frame temp_fr;
-      memcpy(&temp_fr, recv_frame, sizeof(struct frame));
+      struct frame* temp_fr = new frame;
+      memcpy(temp_fr, recv_frame, sizeof(struct frame));
       MAKE_CRC(temp_fr);
-      if (temp_fr.crc[0] != recv_frame->crc[0] || temp_fr.crc[1] != recv_frame->crc[1]) // checksum err
+      if (temp_fr->crc[0] != recv_frame->crc[0] || temp_fr->crc[1] != recv_frame->crc[1]) // checksum err
       {
+        short* calc_crc = (short*)temp_fr->crc;
+        short* act_crc = (short*)recv_frame->crc;
         // ignore frames with the error
-        POST_WARN("DATA_LINK_LAYER: Dropping frame, invalid CRC: expected " << (short)temp_fr.crc[0] << (short)temp_fr.crc[1] << ", but was " << (short)recv_frame->crc[0] << (short)recv_frame->crc[1]);
+        POST_WARN("DATA_LINK_LAYER: Dropping frame, invalid CRC: expected 0x" << hex << *calc_crc << ", but was 0x" << hex << *act_crc);
         return;
       }
       else if (recv_frame->seq_num == frame_expected) //crc checked out and the frame is ok
@@ -255,18 +264,20 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     //// with always receiving two frames
     // this code initializes two frames and splits the packet over them
     SHM_GRAB_NEW(struct frame, fr1, fr1id);
+    memset(fr1, 0, sizeof(struct frame));
     fr1->is_ack = 0;
-    if (end_win_list != NULL) fr1->seq_num = end_win_list->fr->seq_num;
+    if (end_win_list != NULL)
+    {
+      fr1->seq_num = end_win_list->fr->seq_num;
+      INC(fr1->seq_num);
+    }
     else fr1->seq_num = 0;
     fr1->split_packet = 0;
-    INC(fr1->seq_num);
     fr1->end_of_packet = 0;
     INC_UPTO(packet_num, 8); // 3 bits = 8
     fr1->packet_num = packet_num;
     memcpy(fr1->payload, recv_packet->payload, 150);
-    POST_INFO(fr1->payload);
-    MAKE_CRC((*fr1));
-    POST_INFO(fr1->payload);
+    MAKE_CRC(fr1);
     num_buffered += 1;
 
     frame *fr2q = NULL;
@@ -284,7 +295,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       memcpy(fr2->payload, recv_packet->payload+150, 106);
       unsigned int ct = recv_packet->command_type;
       memcpy(fr2->payload+106, &ct, 1); // copy the remaining parts of the packet struct over
-      MAKE_CRC((*fr2));
+      MAKE_CRC(fr2);
       //sets both frames to say that there should be 2 frames
       fr1->split_packet = 1;
       fr2->split_packet = 1;
@@ -374,7 +385,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       ack_fr->seq_num = frame_expected;
       ack_fr->end_of_packet = 0;
       ack_fr->packet_num = 0;
-      //MAKE_CRC((*ack_fr));
+      //MAKE_CRC(ack_fr);
       ack_fr->crc[0] = 0;
       ack_fr->crc[1] = 0;
 
