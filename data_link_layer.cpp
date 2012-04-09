@@ -88,8 +88,9 @@ timer_t* ack_timer_id;
 #define BETWEEN(a, b, c) (((a <= b) && (b < c)) || ((c < a) && (a <= b)) || ((c < c) && (c < a)))
 
 // CRC source code thanks to pycrc, modified to be used as macros
-#define __CRC_REFLECT(ret, data, data_len) \
+#define __CRC_REFLECT(ret, datao, data_len) \
 { \
+  short data = datao; \
   ret = data & 0x01; \
   for (unsigned int j = 1; j < data_len; j++) \
   { \
@@ -127,7 +128,7 @@ timer_t* ack_timer_id;
     crc = (crc << 1) | 0x00; \
     if (bit) crc ^= 0x8005; \
   } \
-  short res = crc; \
+  unsigned short res = crc; \
   __CRC_REFLECT(res, crc, 16); \
   crc = (res ^ 0x0000) & 0xffff; \
 }
@@ -135,9 +136,9 @@ timer_t* ack_timer_id;
 // -2 is so that crc bytes are not included in the crc
 #define MAKE_CRC(fr) \
 { \
-  short crc; \
+  unsigned short crc; \
   crc = 0x0000; \
-  char* frp = (char*)&fr; \
+  unsigned char* frp = (unsigned char*)&fr; \
   __CRC_UPDATE(crc, frp, sizeof(fr)-2); \
   __CRC_FINALIZE(crc); \
   fr.crc[0] = *((char*)&crc); \
@@ -263,7 +264,9 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     INC_UPTO(packet_num, 8); // 3 bits = 8
     fr1->packet_num = packet_num;
     memcpy(fr1->payload, recv_packet->payload, 150);
+    POST_INFO(fr1->payload);
     MAKE_CRC((*fr1));
+    POST_INFO(fr1->payload);
     num_buffered += 1;
 
     frame *fr2q = NULL;
