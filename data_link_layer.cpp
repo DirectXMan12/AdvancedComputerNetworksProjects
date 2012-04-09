@@ -176,7 +176,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       unsigned int last_seq = 0;
       struct window_element* last_frame = win_list;
       
-      for (unsigned int i = win_list->fr->seq_num; BETWEEN(win_list->fr->seq_num, i, recv_frame->seq_num); INC(i))
+      for (unsigned int i = win_list->fr->seq_num; BETWEEN(last_frame->fr->seq_num, i, recv_frame->seq_num); INC(i))
       {
         // begin stop timer code
         int timer_ind = 0;
@@ -188,8 +188,12 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         // move the sliding window
         win_list = win_list->next;
         // clear up the old frame 
-        delete old_f->fr;
-        delete old_f;
+        if (old_f != NULL && old_f->fr != NULL)
+        {
+          delete old_f->fr;
+          //delete old_f;
+        }
+        else if (old_f != NULL) delete old_f;
         num_buffered--;
       }
     }

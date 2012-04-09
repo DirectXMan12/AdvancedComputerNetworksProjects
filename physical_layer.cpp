@@ -25,7 +25,6 @@ void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
   SHM_GRAB(struct frame, fts, (info->si_value.sival_int));
 
   // TODO: do random error stuff in Data Link Layer
-  POST_INFO("is ack: " << fts->payload[0]);
 
   // send the frame on its merry way
   write(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame));
