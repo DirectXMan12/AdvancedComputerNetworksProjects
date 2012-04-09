@@ -21,6 +21,32 @@ int personID;
 
 void handle_app_signals(int, siginfo_t*, void*);
 
+void sendPacket(bool isErr, char* payload, int payload_len, unsigned int command)
+{
+  SHM_GRAB_NEW(struct packet, p, packetid);
+  if (!isErr)
+  {
+    memcopy(p->payload, payload, payload_len);
+    p->pl_data_len = payload_len;
+  }
+  else
+  {
+    p->payload[0] = 'E'; 
+    p->payload[1] = 'R';
+    p->payload[2] = 'R';
+
+    p->pl_data_len = 3;
+  }
+  p->command_type = command;
+  p->seq_num = 0;
+
+  sigval v;
+  v.sival_int = packetid;
+  POST_INFO("APP_LAYER: sending new test packet");
+  sigqueue(dll_pid, SIG_NEW_PACKET, v);
+  SHM_RELEASE(struct packet, p);
+}
+
 void fork_to_new_client(int comm_sock)
 {
   if (fork() == 0)
@@ -150,19 +176,4 @@ int main(int argc, char* argv[])
   }
 
   while(1) waitpid(-1, 0, 0);
-}
-
-void sendPacket(bool isErr, char* payload, int payload_len, unsigned int command)
-{
-  SHM_GRAB_NEW(struct packet, p, packetid);
-  memcopy(p->payload, payload, payload_len);
-  p->command_type = command;
-  p->pl_data_len = payload_len;
-  p->seq_num = 0;
-
-  sigval v;
-  v.sival_int = packetid;
-  POST_INFO("APP_LAYER: sending new test packet");
-  sigqueue(dll_pid, SIG_NEW_PACKET, v);
-  SHM_RELEASE(struct packet, p);
 }

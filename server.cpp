@@ -17,20 +17,20 @@ void insertPeople(char* first_name, char* last_name, char* location)
 	if(strlen(first_name)>15 || strlen(first_name)<2)
   {
 		//invalid first_name
-		printf("Invalid First Name: name needs to be between 2 and 15 characters long");
+		POST_ERR("APPLICATION_LAYER: Invalid First Name: name needs to be between 2 and 15 characters long");
 		validInput=false;
 	}
 	if(strlen(last_name)>20 || strlen(last_name)<2)
   {
 		//invalid last_name
-		printf("Invalid Last Name: name needs to be between 2 and 20 characters long");
+		POST_ERR("APPLICATION_LAYER: Invalid Last Name: name needs to be between 2 and 20 characters long");
 		validInput=false;
 	}
 	if(strlen(location)>36 || strlen(location)<2)
   {
 		//invalid location
-		printf("Invalid Location: name needs to be between 2 and 36 characters long");
-		validInput=false;
+		POST_ERR("APPLICATION_LAYER: Invalid Location: name needs to be between 2 and 36 characters long");
+		validInput = false;
 	}
 	//input is good
 	if(validInput)
@@ -107,15 +107,15 @@ void removePeople(char* first_name, char* last_name)
 	if(strlen(first_name)>15 || strlen(first_name)<2)
   {
 		//invalid first_name
-		printf("Invalid First Name: name needs to be between 2 and 15 characters long");
-		validInput=false;
+		POST_ERR("APPLICATION_LAYER: Invalid First Name: name needs to be between 2 and 15 characters long");
+		validInput = false;
 	}
 
 	if(strlen(last_name)>20 || strlen(last_name)<2)
   {
 		//invalid last_name
-		printf("Invalid Last Name: name needs to be between 2 and 20 characters long");
-		validInput=false;
+		POST_ERR("APPLICATION_LAYER: Invalid Last Name: name needs to be between 2 and 20 characters long");
+		validInput = false;
 	}
 
 	//input is good
@@ -128,9 +128,8 @@ void removePeople(char* first_name, char* last_name)
 		strSqlMsg +="', '";
 		strSqlMsg += location;
 		strSqlMsg +="')";		
-		char* sqlMsg= (char*)strSqlMsg.c_str();
+		char* sqlMsg = (char*)strSqlMsg.c_str();
 		sqlite3_exec(database, sqlMsg, callbackPerson, 0, &ErrMsg);
-		//person has been updated need to add login information
 	}
 }
 
@@ -159,13 +158,13 @@ void loginAttempt(char* username, char* password)
 	if(strlen(username)>20 || strlen(username)<2)
   {
 		//invalid first_name
-		printf("Invalid username: name needs to be between 2 and 20 characters long");
+		POST_ERR("APPLICATION_LAYER: Invalid username: name needs to be between 2 and 20 characters long");
 		validInput=false;
 	}
 	if(strlen(password)>20 || strlen(password)<2)
   {
 		//invalid password
-		printf("Invalid password: name needs to be between 2 and 20 characters long");
+		POST_ERR("APPLICATION_LAYER: Invalid password: name needs to be between 2 and 20 characters long");
 		validInput=false;
 	}
 	if(validInput)
@@ -199,7 +198,7 @@ void changePassword(char* newPassword)
 	if(strlen(newPassword)>20 || strlen(username)<2)
   {
 		//invalid first_name
-		printf("Invalid username: name needs to be between 2 and 20 characters long");
+		POST_ERR("APPLICATION_LAYER: Invalid username: name needs to be between 2 and 20 characters long");
 		validInput=false;
 	}
 	if(validInput && successfulLogin)

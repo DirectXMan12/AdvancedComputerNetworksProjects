@@ -1,3 +1,4 @@
+void sendPacket(bool isErr, char* payload, int payload_len, unsigned int command)
 static int callbackPerson(void *NotUsed, int argc, char **argv, char **azColName);
 void insertPeople(char* first_name, char* last_name, char* location);
 static int callbackInsertPhoto(void *NotUsed, int argc, char **argv, char **azColName);
