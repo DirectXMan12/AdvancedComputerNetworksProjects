@@ -26,9 +26,10 @@ unsigned int num_buffered;
 unsigned int packet_num = 0;;
 unsigned int next_null_timer = 0;
 bool acks_needed = false;
+int frame_counter = 0;
 
 // potential variables to get two frames into the same packet
-char* temp_packet = new char[300];
+char* temp_packet = new char[sizeof(struct packet)];
 bool packet_frame[] = {false, false};
 
 struct timer_info
@@ -220,7 +221,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         packet_frame[recv_frame->end_of_packet]=true;
         //cool math that will offset the payload onto the packet based on the frame number without a check
         // line immediately below this does not work
-        //((150*recv_frame->end_of_packet)+ recv_frame->payload)temp_packet;
+        memcpy(temp_packet+(150*recv_frame->end_of_packet), recv_frame->payload, recv_frame->end_of_packet ? sizeof(struct packet)-150 : 150);
         
         //check to see if both halves have been sent in
         if((packet_frame[0] && packet_frame[1]) || recv_frame->split_packet == 0)
@@ -238,7 +239,9 @@ void handle_signals(int signum, siginfo_t* info, void* context)
           sigqueue(app_layer_pid, SIG_NEW_FRAME, v);
           INC(frame_expected);
           // need to clear the temp_packet
-          temp_packet = 0;
+          delete[] temp_packet;
+          temp_packet = new char[sizeof(struct packet)];
+
           SHM_RELEASE(struct packet, packet2trans);
           if (acks_needed == false)
           {
@@ -278,11 +281,13 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     else fr1->seq_num = 0;
     fr1->split_packet = 0;
     fr1->end_of_packet = 0;
-    INC_UPTO(packet_num, 8); // 3 bits = 8
+    INC_UPTO(packet_num, 7); // 3 bits = 8
     fr1->packet_num = packet_num;
     memcpy(fr1->payload, recv_packet->payload, 150);
     MAKE_CRC(fr1);
     num_buffered += 1;
+    INC_UPTO(frame_counter, 5);
+    if (frame_counter == 5) fr1->crc[1] = ~fr1->crc[1]; // random err
 
     frame *fr2q = NULL;
     int fr2id = -1;
@@ -300,6 +305,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       unsigned int ct = recv_packet->command_type;
       memcpy(fr2->payload+106, &ct, 1); // copy the remaining parts of the packet struct over
       MAKE_CRC(fr2);
+      INC_UPTO(frame_counter, 5);
+      if (frame_counter == 5) fr1->crc[1] = ~fr1->crc[1]; // random err
       //sets both frames to say that there should be 2 frames
       fr1->split_packet = 1;
       fr2->split_packet = 1;

@@ -17,6 +17,7 @@
 #define SIG_TIMER_ELAPSED SIGRTMIN+9
 
 // shared memory stuff to work with signal attachments
+// TODO: fix random so doesn't have null char issue
 #define SHM_GRAB_NEW(type, vname, id) \
 type* vname; \
 int id; \
