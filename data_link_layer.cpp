@@ -24,7 +24,6 @@ pid_t phys_layer_pid;
 pid_t app_layer_pid;
 unsigned int packet_num = 0;;
 unsigned int next_NULL_timer = 0;
-int frame_counter = 0;
 
 struct timer_info
 {
@@ -346,10 +345,10 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         timers[tv1].assoc_with = fts->seq_num;
 
         SHM_RELEASE(struct frame, fts);
-        //POST_INFO("Resending " << nfs << " with ack " << ((frame_expected + WIN_SIZE -1) % WIN_SIZE));
 
         INC(nfs);
       }
+      POST_INFO("Resent " << ack_expected << " to " << ((nfs + WIN_SIZE - 1) % WIN_SIZE));
     }
   }
   else if (signum == SIG_FLOW_ON) // we are ready to go (from phys layer)

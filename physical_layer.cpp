@@ -5,6 +5,10 @@
 #include <errno.h>
 #include "sendfd.h"
 
+#define ERROR_RATE 6
+
+int frame_counter = 0;
+
 PhysicalLayer* phys_obj;
 
 PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
@@ -22,15 +26,30 @@ void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
     exit(2);
   }
 
-  SHM_GRAB(struct frame, fts, (info->si_value.sival_int));
+  
+  SHM_GRAB(struct frame, fts, (info->si_value.sival_int));  
 
-  // TODO: do random error stuff in Data Link Layer
+  if (frame_counter == ERROR_RATE-1)
+  {
+    frame* ftsm = new frame;
+    memset(ftsm, 0, sizeof(struct frame));
+    memcpy(ftsm, fts, sizeof(struct frame));
 
-  // send the frame on its merry way
-  write(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame));
+    // mwah-hah-ha-ha!
+    ftsm->crc[0] = ~(fts->crc[0]);
+    write(phys_obj->tcp_sock, (void*)ftsm, sizeof(struct frame));
+    delete ftsm;
+  }
+  else
+  {
+    // send the frame on its merry way
+    write(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame));
+  }
   //POST_INFO("PHYSICAL_LAYER: sent data on socket " << phys_obj->tcp_sock);
   SHM_RELEASE(struct frame, fts);
   SHM_DESTROY((info->si_value.sival_int));
+  
+  frame_counter = (frame_counter + 1) % ERROR_RATE;
 }
 
 int PhysicalLayer::init_connection(const char* client_name, const char* server_name, bool is_comm_process)
