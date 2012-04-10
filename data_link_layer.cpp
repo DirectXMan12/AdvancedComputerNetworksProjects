@@ -286,7 +286,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     fr1->end_of_packet = 0;
     INC_UPTO(packet_num, 7); // 3 bits = 8
     fr1->packet_num = packet_num;
-    memcpy(fr1->payload, recv_packet->payload, 150);
+    memcpy(fr1->payload, recv_packet, 150);
     MAKE_CRC(fr1);
     num_buffered += 1;
     INC_UPTO(frame_counter, 5);
@@ -304,7 +304,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       INC(fr2->seq_num);
       fr2->end_of_packet = 1;
       fr2->packet_num = packet_num;
-      memcpy(fr2->payload, recv_packet->payload+150, 106);
+      memcpy(fr2->payload, recv_packet+150, 106);
       unsigned int ct = recv_packet->command_type;
       memcpy(fr2->payload+106, &ct, 1); // copy the remaining parts of the packet struct over
       MAKE_CRC(fr2);
