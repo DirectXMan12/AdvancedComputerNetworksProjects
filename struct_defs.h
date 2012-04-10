@@ -1,7 +1,7 @@
 #ifndef __FRAME_STRUCT__
 #define __FRAME_STRUCT__
 
-#define SEQ_BITS 1
+#define SEQ_BITS 2
 
 struct frame
 {
@@ -9,7 +9,7 @@ struct frame
   unsigned int seq_num : SEQ_BITS; // max 4 -> 2 bits
   unsigned int split_packet : 1; // is this packet split over multiple frames
   unsigned int end_of_packet : 1; // is end of packet?
-  unsigned int padding : 4; // fill up remaining space if 8 does not divide 2*SEQ_BITS + 2 
+  //unsigned int padding : 4; // fill up remaining space if 8 does not divide 2*SEQ_BITS + 2 
   char payload[150]; // should be up to 150
   char crc[2];
 };

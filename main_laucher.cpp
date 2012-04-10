@@ -16,7 +16,7 @@ using namespace std;
 void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
   while(!flow_on) {}
-  flow_on = false; // reset flow_on
+  //flow_on = false; // reset flow_on
 
   SHM_GRAB_NEW(struct packet, p, packetid);
 //  if (!isErr)

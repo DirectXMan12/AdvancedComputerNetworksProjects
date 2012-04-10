@@ -17,7 +17,7 @@ using namespace std;
 #define ACK_SECS 1
 #define ACK_NSECS 0
 
-#define WIN_SIZE 1
+#define WIN_SIZE 4
 
 // for internal workings
 pid_t phys_layer_pid;
@@ -38,8 +38,11 @@ timer_t* ack_timer_id;
 
 // for the protocol
 unsigned short nfs = WIN_SIZE; // WIN_SIZE and not 0 b/c first frame needs to be 0
+unsigned short ack_expected = 0;
 unsigned short frame_expected = 0;
-struct packet* buffer;
+struct packet** buffer;
+unsigned short num_buffered = 0;
+unsigned short buff_index = 0;
 
 // potential variables to get two frames into the same packet
 char* temp_packet = new char[sizeof(struct packet)];
@@ -99,6 +102,16 @@ bool packet_frame[] = {false, false};
 
 #define FIND_TIMER(seq_num, index) for (index = 0; index < 4; index++) if (timers[index].assoc_with == seq_num) break;
 #define FIND_BLANK_TIMER(res) for (res = 0; res < 4; res++) if (timers[res].assoc_with == -1) break;
+
+#define FIND_OR_CREATE_TIMER(res, target) \
+{ \
+  FIND_TIMER(target, res); \
+  if (res > 3) \
+  { \
+    FIND_BLANK_TIMER(res); \
+  } \
+}
+
 
 #define INC(seq_n) (seq_n == WIN_SIZE ? seq_n = 0 : seq_n++)
 #define INC_UPTO(seq_n, max) (seq_n == max ? seq_n = 0 : seq_n++)
@@ -171,7 +184,6 @@ bool packet_frame[] = {false, false};
 // note the lack of external function calls here -- see above
 // MACROS FTW
 // TODO:
-//  - check CRCs to make sure that we have a good frame(seems to be done)
 //  - deal with reassembling packets from split frames(done unless we convert the packet to only send as many frames as needed)
 void handle_signals(int signum, siginfo_t* info, void* context)
 {
@@ -194,108 +206,34 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       short* act_crc = (short*)recv_frame->crc;
       // ignore frames with the error
       POST_WARN("DATA_LINK_LAYER: Dropping frame, invalid CRC: expected 0x" << hex << *calc_crc << ", but was 0x" << hex << *act_crc);
-      
-      // do the same as timeout event
-      SHM_GRAB_NEW(struct frame, fts, shmid);
-
-      // TODO: deal with splitting packets over 2 frames/packet number
-
-      memset(fts, 0, sizeof(struct frame)); // clear out the frame
-      memcpy(fts->payload, buffer, 150);
-      fts->seq_num = nfs;
-      fts->ack_num = frame_expected;
-      INC(fts->ack_num);
-      MAKE_CRC(fts);
-
-      sigval v;
-      v.sival_int = shmid;
-      sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
-
-      int tv1 = 0;
-      FIND_TIMER((fts->seq_num), tv1);
-      START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
-      timers[tv1].assoc_with = fts->seq_num;
-
-      SHM_RELEASE(struct frame, fts);
-    }
-
-    int getting_next_frame = 0;
-
-    POST_INFO("Got frame with sn " << recv_frame->seq_num << " and ack " << recv_frame->ack_num);
-
-    if (recv_frame->seq_num == frame_expected) //crc checked out and the frame is ok
-    {
-      // send new packet to app layer
-      SHM_GRAB_NEW(struct packet, pts, shmid);
-      memset(pts, 0, sizeof(struct packet));
-      memcpy(pts, recv_frame->payload, 150);  // TODO: deal with frames split in two
-
-      sigval v;
-      v.sival_int = shmid;
-      sigqueue(app_layer_pid, SIG_NEW_PACKET, v);
-
-      SHM_RELEASE(struct packet, pts);
-      INC(frame_expected);
-
-      getting_next_frame++;
     }
     else
     {
-      POST_WARN("DATA_LINK_LAYER: Dropping frame: expected " << frame_expected << ", got " << recv_frame->seq_num);
-    }
-
-    if (recv_frame->ack_num == nfs)
-    {
-      // stop the timer
-      int timer_ind = 0; 
-      FIND_TIMER((recv_frame->ack_num), timer_ind);
-      if (timer_ind < 4)
+      if (recv_frame->seq_num == frame_expected)
       {
-        POST_INFO("processed ack for " << recv_frame->ack_num);
-        STOP_TIMER(timer_ind);
+        SHM_GRAB_NEW(struct packet, pts, packid);
+        memset(pts, 0, sizeof(struct packet));
+        memcpy(pts, recv_frame->payload, 150);
+
+        sigval v;
+        v.sival_int = packid;
+        sigqueue(app_layer_pid, SIG_NEW_PACKET, v);
+        SHM_RELEASE(struct packet, pts);
+
+        INC(ack_expected);
       }
 
-      // enable flow (roughly equivalent to requesting a new packet)
-      sigval v;
-      v.sival_int = 1;
-      sigqueue(app_layer_pid, SIG_FLOW_ON, v);
-      getting_next_frame += 2;
-    }
-    else
-    {
-      POST_WARN("ACK for " << recv_frame->ack_num << " was bogus");
-    }
+      while(BETWEEN(ack_expected, recv_frame->ack_num, nfs))
+      {
+        num_buffered--;
 
-    if (getting_next_frame == 1) // Proper frame, but won't be sending next frame b/c no ack for last frame
-    {
-      POST_WARN("not proper ack");
-      SHM_GRAB_NEW(struct frame, fts, shmid);
+        int timer_ind = 0;
+        FIND_TIMER(ack_expected, timer_ind);
+        STOP_TIMER(timer_ind);
 
-      // TODO: deal with splitting packets over 2 frames/packet number
-
-      memset(fts, 0, sizeof(struct frame)); // clear out the frame
-      memcpy(fts->payload, buffer, 150);
-      fts->seq_num = nfs;
-      fts->ack_num = frame_expected;
-      INC(fts->ack_num);
-      MAKE_CRC(fts);
-
-      sigval v;
-      v.sival_int = shmid;
-      sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
-
-      int tv1 = 0;
-      FIND_TIMER((fts->seq_num), tv1);
-      START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
-      timers[tv1].assoc_with = fts->seq_num;
-
-      SHM_RELEASE(struct frame, fts);
-    }
-    
-    if (getting_next_frame == 3) // got proper frame, got last frame acked, waiting for new frame to ack this frame
-    {
-      START_ACK_TIMER(ACK_SECS, ACK_NSECS);
-    }
+        INC(ack_expected);
+      }
+    }  
     
     SHM_RELEASE(struct frame, recv_frame);
     SHM_DESTROY((info->si_value.sival_int));
@@ -305,21 +243,18 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     // we got a new packet from the app layer!
     SHM_GRAB(struct packet, recv_packet, (info->si_value.sival_int));
 
-    STOP_ACK_TIMER;
-    INC(nfs);
-
     SHM_GRAB_NEW(struct frame, fts, shmid);
 
     // TODO: deal with splitting packets over 2 frames/packet number
 
-    memset(buffer, 0, sizeof(struct packet)); // clear out the old buffer
-    memcpy(buffer, recv_packet, sizeof(struct packet)); // copy down for later uses
+    memset(buffer[nfs], 0, sizeof(struct packet)); // clear out the old buffer
+    memcpy(buffer[nfs], recv_packet, sizeof(struct packet)); // copy down for later uses
+    num_buffered++;
     
     memset(fts, 0, sizeof(struct frame)); // clear out the frame
     memcpy(fts->payload, recv_packet, 150);
     fts->seq_num = nfs;
-    fts->ack_num = frame_expected;
-    INC(fts->ack_num);
+    fts->ack_num = (frame_expected + WIN_SIZE - 1) % WIN_SIZE;
     MAKE_CRC(fts);
 
     sigval v;
@@ -327,7 +262,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
 
     int tv1 = 0;
-    FIND_BLANK_TIMER(tv1);
+    FIND_OR_CREATE_TIMER(tv1, fts->seq_num);
     START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
     timers[tv1].assoc_with = fts->seq_num;
 
@@ -335,41 +270,38 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
     SHM_RELEASE(struct packet, recv_packet);
     SHM_DESTROY((info->si_value.sival_int));
+
+    INC(nfs);
+
     POST_INFO("sending " << nfs << " with ack " << (frame_expected == WIN_SIZE ? 0 : frame_expected+1));
   } 
   else if(signum == SIG_TIMER_ELAPSED)
   {
-    SHM_GRAB_NEW(struct frame, fts, shmid);
-
-    STOP_ACK_TIMER;
-
-    // TODO: deal with splitting packets over 2 frames/packet number
-
-    memset(fts, 0, sizeof(struct frame)); // clear out the frame
-    memcpy(fts->payload, buffer, 150);
-    fts->seq_num = nfs;
-    fts->ack_num = frame_expected;
-    INC(fts->ack_num);
-    MAKE_CRC(fts);
-
-    sigval v;
-    v.sival_int = shmid;
-    sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
-
-    if (info->si_value.sival_int != 1)
+    nfs = ack_expected;
+    for (int i = 0; i < num_buffered; i++)
     {
+      SHM_GRAB_NEW(struct frame, fts, shmid);
+
+      // TODO: deal with splitting packets over 2 frames/packet number
+      memset(fts, 0, sizeof(struct frame)); // clear out the frame
+      memcpy(fts->payload, buffer[nfs], 150);
+      fts->seq_num = nfs;
+      fts->ack_num = (frame_expected + WIN_SIZE - 1) % WIN_SIZE;
+      MAKE_CRC(fts);
+
+      sigval v;
+      v.sival_int = shmid;
+      sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
+
       int tv1 = 0;
-      FIND_TIMER((fts->seq_num), tv1);
+      FIND_OR_CREATE_TIMER(tv1, nfs);
       START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
       timers[tv1].assoc_with = fts->seq_num;
-      POST_INFO("resending " << nfs << " with ack " << (frame_expected == WIN_SIZE ? 0 : frame_expected + 1));
-    }
-    else
-    {
-      POST_WARN("ACK Timer went off, so sending " << nfs << " to ack " << (frame_expected == WIN_SIZE ? 0 : frame_expected +1));
-    }
 
-    SHM_RELEASE(struct frame, fts);
+      SHM_RELEASE(struct frame, fts);
+
+      INC(nfs);
+    }
   }
   else if (signum == SIG_FLOW_ON) // we are ready to go (from phys layer)
   {
@@ -385,6 +317,22 @@ void handle_signals(int signum, siginfo_t* info, void* context)
   {
     POST_ERR("DATA_LINK_LAYER: Segfault!");
     exit(2);
+  }
+
+  if (signum == SIG_NEW_FRAME || signum == SIG_NEW_PACKET || signum == SIG_TIMER_ELAPSED)
+  {
+    if (num_buffered < WIN_SIZE-1)
+    {
+      sigval v;
+      v.sival_int = 1;
+      sigqueue(app_layer_pid, SIG_FLOW_ON, v);
+    }
+    else
+    {
+      sigval v;
+      v.sival_int = 0;
+      sigqueue(app_layer_pid, SIG_FLOW_ON, v);
+    }
   }
 
 }
@@ -437,7 +385,11 @@ void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process,
     POST_ERR("DATA_LINK_LAYER: Issue initializing ACK timer");
   }
 
-  buffer = new packet;
+  buffer = (packet**) new char[sizeof(struct packet*)*WIN_SIZE];
+  for (int i = 0; i < WIN_SIZE; i++)
+  {
+    buffer[i] = new packet;
+  }
 
   if (phys_layer_pid == 0) // this will become the physical layer
   {
