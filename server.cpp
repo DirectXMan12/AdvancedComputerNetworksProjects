@@ -20,6 +20,22 @@ void initDB(sqlite3* db)
   database = db;
 }
 
+void makeTables()
+{
+  // People
+  string createPeopleT = "create table people(id INTEGER PRIMARY KEY ASC, first_name TEXT, last_name TEXT, location TEXT);";
+
+  // Photos
+  string createPhotosT = "create table photos(id INTEGER PRIMARY KEY ASC, type INTEGER, person_id INTEGER NOT NULL, data BLOB, FOREIGN KEY(person_id) REFERENCES people(id));";
+
+  // Login
+  string createLoginT = "create table login(username TEXT PRIMARY KEY, password TEXT NOT NULL);";
+
+  sqlite3_exec(database, createPeopleT.c_str(), NULL, 0, 0);
+  sqlite3_exec(database, createPhotosT.c_str(), NULL, 0, 0);
+  sqlite3_exec(database, createLoginT.c_str(), NULL, 0, 0);
+}
+
 int callbackPerson(void *isListResp, int argc, char **argv, char **azColName)
 {
   ostringstream pb;
