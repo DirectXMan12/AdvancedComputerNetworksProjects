@@ -117,6 +117,94 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   {
     SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
     // do some stuff, memcpy
+    if(!isServer){
+  		if(pack->command_type == COMMAND_DOWNLOADPHOTO){
+  		//need to save the photo
+  			char* fileName;
+  			printf("Please enter the desired file name");
+  			sprintf("%s", fileName);
+  			ofstream outputFile;
+  			outputFile.open(fileName);
+  			outputFile<<pack->payload;
+  			printf("Photo downloaded.");
+  		}
+  		else{
+  			//just getting a confirmation/denial
+  			char* buffer;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			printf(buffer);
+  		}
+  	}
+  	else{
+  		if(pack->command_type == COMMAND_LOGIN){
+  		}
+  		else if(pack->command_type == COMMAND_UPLOADPHOTO){
+  			//adding in a new person
+  			int offset =0;
+  			int prevOffset = 0;
+  			char* buffer, personID, type, BLOB;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			offset = strlen(buffer);
+  			memcopy(personID, buffer, offset);
+  			prevOffset = offset;
+  			offset = strlen(buffer+prevOffest);
+  			memcopy(type, buffer+prevOffset, offset);
+  			prevOffset = offset;
+  			offset = strlen(buffer+prevOffest);
+  			memcopy(BLOB, buffer+prevOffset, offset);
+  			insertPeople((int)personID, (int)type, BLOB);
+  		}
+  		else if(pack->command_type == COMMAND_DOWNLOADPHOTO){
+  			//adding new photo
+  			char* buffer;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			downloadPhoto((int)buffer);
+  		}
+  		else if(pack->command_type == COMMAND_QUERYPHOTOS){
+  			//getting a person's photo information
+  			char* buffer;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			selectPhotos(buffer);
+  		}
+  		else if(pack->command_type == COMMAND_LISTPEOPLE){
+  			//getting the current list of people
+  			selectPeople();
+  		}
+  		else if(pack->command_type == COMMAND_ADDPERSON){
+  			//adding in a new person
+  			int offset =0;
+  			int prevOffset = 0;
+  			char* buffer, firstName, lastName, location;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			offset = strlen(buffer);
+  			emcopy(firstName, buffer, offset);
+  			prevOffset = offset;
+  			offset = strlen(buffer+prevOffest);
+  			memcopy(lastName, buffer+prevOffset, offset);
+  			prevOffset = offset;
+  			offset = strlen(buffer+prevOffest);
+  			memcopy(location, buffer+prevOffset, offset);
+  			insertPeople(firstName, lastName, location);
+  		}
+  		else if(pack->command_type == COMMAND_REMOVEPERSON){
+  			//getting rid of a person
+  			char* buffer;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			removePeople((int)buffer);
+  		}
+  		else if(pack->command_type == COMMAND_REMOVEPHOTO){
+  			//getting rid of a photo
+  			char* buffer;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			removePhoto((int)buffer);
+  		}
+  		else if(pack->command_type == COMMAND_SETPASSWORD){
+  			//chaning password
+  			char* buffer;
+  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			changePassword(buffer);
+  		}
+  	}
     SHM_RELEASE(struct packet, pack); 
     SHM_DESTROY((info->si_value.sival_int));
   }
