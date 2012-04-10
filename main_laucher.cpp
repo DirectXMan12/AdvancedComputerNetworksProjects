@@ -7,6 +7,36 @@
 pid_t dll_pid;
 bool already_sent = false;
 bool is_server = false;
+bool flow_on = false;
+
+void sendPacket(bool isErr, const char* payload, int payload_len, int command)
+{
+  while(!flow_on) {}
+  flow_on = false; // reset flow_on
+
+  SHM_GRAB_NEW(struct packet, p, packetid);
+//  if (!isErr)
+//  {
+    memcpy(p->payload, payload, payload_len);
+    p->pl_data_len = payload_len;
+//  }
+/*  else
+  {
+    p->payload[0] = 'E'; 
+    p->payload[1] = 'R';
+    p->payload[2] = 'R';
+
+    p->pl_data_len = 3;
+  }*/
+  p->command_type = command;
+  p->seq_num = 0;
+
+  sigval v;
+  v.sival_int = packetid;
+  //POST_INFO("APPLICATION_LAYER: Sending packet with command " << command);
+  sigqueue(dll_pid, SIG_NEW_PACKET, v);
+  SHM_RELEASE(struct packet, p);
+}
 
 void handle_app_signals(int, siginfo_t*, void*);
 
@@ -47,30 +77,12 @@ void fork_to_new_client(int comm_sock)
   }
 }
 
-void send_a_test_packet()
-{
-  SHM_GRAB_NEW(struct packet, p, packetid);
-  p->payload[0] = 'h';
-  p->payload[1] = 'i';
-  p->payload[2] = '!';
-  p->command_type = 0;
-  p->pl_data_len = 3;
-  p->seq_num = 0;
-
-  sigval v;
-  v.sival_int = packetid;
-  POST_INFO("APP_LAYER: sending new test packet");
-  sigqueue(dll_pid, SIG_NEW_PACKET, v);
-  SHM_RELEASE(struct packet, p);
-}
-
 void handle_app_signals(int signum, siginfo_t* info, void* context)
 {
   //POST_INFO("APP_LAYER: got signal " << signum);
-  if (signum == SIG_FLOW_ON && !already_sent && !is_server)
+  if (signum == SIG_FLOW_ON)
   {
-    already_sent = true;
-    send_a_test_packet(); // NOTE: shouldn't be calling an external function from here unless we make it async-safe
+    flow_on = (info->si_value.sival_int == 1);
   }
   else if (signum == SIG_NEW_CLIENT)
   {
@@ -80,7 +92,9 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   else if (signum == SIG_NEW_PACKET)
   {
     SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
-    // do some stuff, memcpy
+    
+    POST_INFO("APPLICATION_LAYER: new packet: " << pack->payload);
+
     SHM_RELEASE(struct packet, pack); 
     SHM_DESTROY((info->si_value.sival_int));
   }
@@ -122,6 +136,12 @@ int main(int argc, char* argv[])
     sigaction(SIG_NEW_CLIENT, &act, 0);
   }
 
-
-  while(1) waitpid(-1, 0, 0);
+  if (is_server)
+  {
+    while(1) waitpid(-1, 0, 0);
+  }
+  else // we are a client, send test packets
+  {
+    while(1) sendPacket(0, "hi!", 3, 0);
+  }
 }
