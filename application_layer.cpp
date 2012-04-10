@@ -4,10 +4,12 @@
 #include <stdio.h>
 #include <string.h>
 #include <string>
+#include <fstream>
 #include "err_macros.h"
 #include "physical_layer.h"
 #include "data_link_layer.h"
 #include "server.h"
+#include "client.h"
 
 using namespace std;
 
@@ -20,7 +22,7 @@ sqlite3* db;
 
 void handle_app_signals(int, siginfo_t*, void*);
 
-void sendPacket(bool isErr, const char* payload, int payload_len, unsigned int command)
+void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
   SHM_GRAB_NEW(struct packet, p, packetid);
   if (!isErr)
@@ -41,7 +43,7 @@ void sendPacket(bool isErr, const char* payload, int payload_len, unsigned int c
 
   sigval v;
   v.sival_int = packetid;
-  POST_INFO("APP_LAYER: sending new test packet");
+  POST_INFO("APPLICATION_LAYER: Sending packet with command " << command);
   sigqueue(dll_pid, SIG_NEW_PACKET, v);
   SHM_RELEASE(struct packet, p);
 }
@@ -69,6 +71,7 @@ void fork_to_new_client(int comm_sock)
     }
     else
     {
+      srandom(getpid());
       struct sigaction act;
       act.sa_sigaction = &handle_app_signals;
       sigemptyset(&act.sa_mask);
@@ -102,11 +105,16 @@ void send_a_test_packet()
 
 void handle_app_signals(int signum, siginfo_t* info, void* context)
 {
-  //POST_INFO("APP_LAYER: got signal " << signum);
-  if (signum == SIG_FLOW_ON && !already_sent && !is_server)
+  POST_INFO("APPLICATION_LAYER: got signal " << signum);
+  /*if (signum == SIG_FLOW_ON && !already_sent && !is_server)
   {
     already_sent = true;
     send_a_test_packet(); // NOTE: shouldn't be calling an external function from here unless we make it async-safe
+  }*/
+  if (signum == SIGSEGV)
+  {
+    POST_ERR("APPLICATION_LAYER: Segfault!");
+    exit(2);
   }
   else if (signum == SIG_NEW_CLIENT)
   {
@@ -115,56 +123,96 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   }
   else if (signum == SIG_NEW_PACKET)
   {
+    POST_INFO("APPLICATION_LAYER: New packet incoming!");
+    //POST_INFO("DATA_LINK_LAYER: Memory at path '" << (char *)info->si_value.sival_int << "'...");
     SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
     // do some stuff, memcpy
-    if(!isServer){
+    POST_INFO("APPLICATION_LAYER: Packet has command type of " << pack->command_type);
+    if(!is_server)
+    {
   		if(pack->command_type == COMMAND_DOWNLOADPHOTO){
   		//need to save the photo
-  			char* fileName;
-  			printf("Please enter the desired file name");
-  			sprintf("%s", fileName);
+  			string fileName;
+  			printf("Please enter the desired file name: ");
+        cin >> fileName;
   			ofstream outputFile;
-  			outputFile.open(fileName);
+  			outputFile.open(fileName.c_str());
   			outputFile<<pack->payload;
   			printf("Photo downloaded.");
   		}
-  		else{
+  		else
+      {
   			//just getting a confirmation/denial
-  			char* buffer;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
-  			printf(buffer);
+  			char* buffer = new char[pack->pl_data_len];
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
+        POST_INFO("APPLICATION_LAYER: " << buffer);
+        if (pack->command_type == COMMAND_LOGIN)
+        {
+          if (buffer[0] == 'L') setClientLoggedIn(true);
+          else setClientLoggedIn(false);
+        }
+        delete[] buffer;
   		}
   	}
-  	else{
-  		if(pack->command_type == COMMAND_LOGIN){
+  	else
+    {
+  		if(pack->command_type == COMMAND_LOGIN)
+      {
+        POST_INFO("APPLICATION_LAYER: login attempt");
+  			int offset = 0;
+  			int prevOffset = 0;
+  			char* buffer = new char[pack->pl_data_len];
+        char* username = new char[20];
+        char* password = new char[20];
+
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
+  			offset = strlen(buffer);
+  			memcpy(username, buffer, offset);
+  			prevOffset = offset;
+  			offset = strlen(buffer+prevOffset);
+  			memcpy(password, buffer+prevOffset, offset);
+  			prevOffset = offset;
+        loginAttempt(username, password);
+
+        delete[] buffer, username, password;
+        
   		}
-  		else if(pack->command_type == COMMAND_UPLOADPHOTO){
+  		else if(pack->command_type == COMMAND_UPLOADPHOTO)
+      {
   			//adding in a new person
   			int offset =0;
   			int prevOffset = 0;
-  			char* buffer, personID, type, BLOB;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+        char* personID = new char[20];
+        char* type = new char[1];
+        char* BLOB = new char[16000]; // photo at most 16k
+
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			offset = strlen(buffer);
-  			memcopy(personID, buffer, offset);
+  			memcpy(personID, buffer, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffest);
-  			memcopy(type, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset);
+  			memcpy(type, buffer+prevOffset, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffest);
-  			memcopy(BLOB, buffer+prevOffset, offset);
-  			insertPeople(personID, type, BLOB);
+  			offset = strlen(buffer+prevOffset);
+  			memcpy(BLOB, buffer+prevOffset, offset);
+  			insertPhoto(personID, type, BLOB);
+
+        delete[] buffer, personID, type, BLOB;
   		}
   		else if(pack->command_type == COMMAND_DOWNLOADPHOTO){
   			//adding new photo
-  			char* buffer;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			downloadPhoto(buffer);
+        delete[] buffer;
   		}
   		else if(pack->command_type == COMMAND_QUERYPHOTOS){
   			//getting a person's photo information
-  			char* buffer;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			selectPhotos(buffer);
+        delete[] buffer;
   		}
   		else if(pack->command_type == COMMAND_LISTPEOPLE){
   			//getting the current list of people
@@ -174,35 +222,42 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			//adding in a new person
   			int offset =0;
   			int prevOffset = 0;
-  			char* buffer, firstName, lastName, location;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+        char* firstName = new char[15];
+        char* lastName = new char[20];
+        char* location = new char[36]; // photo at most 16k
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			offset = strlen(buffer);
-  			emcopy(firstName, buffer, offset);
+  			memcpy(firstName, buffer, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffest);
-  			memcopy(lastName, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset);
+  			memcpy(lastName, buffer+prevOffset, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffest);
-  			memcopy(location, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset);
+  			memcpy(location, buffer+prevOffset, offset);
   			insertPeople(firstName, lastName, location);
+        delete[] buffer, firstName, lastName, location;
   		}
   		else if(pack->command_type == COMMAND_REMOVEPERSON){
   			//getting rid of a person
-  			char* buffer;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			removePeople(buffer);
+        delete[] buffer;
   		}
   		else if(pack->command_type == COMMAND_REMOVEPHOTO){
   			//getting rid of a photo
-  			char* buffer;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			removePhoto(buffer);
+        delete[] buffer;
   		}
   		else if(pack->command_type == COMMAND_SETPASSWORD){
   			//chaning password
-  			char* buffer;
-  			memcopy(buffer, pack->payload, pack->pl_data_len);
+  			char* buffer = new char[pack->pl_data_len];
+  			memcpy(buffer, pack->payload, pack->pl_data_len);
   			changePassword(buffer);
+        delete[] buffer;
   		}
   	}
     SHM_RELEASE(struct packet, pack); 
@@ -236,6 +291,7 @@ int main(int argc, char* argv[])
   }
   else
   {
+    srandom(getpid());
     struct sigaction act;
     act.sa_sigaction = &handle_app_signals;
     sigemptyset(&act.sa_mask);
@@ -244,6 +300,7 @@ int main(int argc, char* argv[])
     sigaction(SIG_NEW_PACKET, &act, 0);
     sigaction(SIG_FLOW_ON, &act, 0);
     sigaction(SIG_NEW_CLIENT, &act, 0);
+    sigaction(SIGSEGV, &act, 0);
 
     if (is_server)
     {
@@ -258,6 +315,10 @@ int main(int argc, char* argv[])
         POST_INFO("APPLICATION_LAYER: Database opened successfully");
         initDB(db);
       }
+    }
+    else
+    {
+      clientInterface();
     }
   }
 

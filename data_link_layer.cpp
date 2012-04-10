@@ -12,9 +12,9 @@
 
 using namespace std;
 
-#define TIMER_SECS 10
+#define TIMER_SECS 2
 #define TIMER_NSECS 0
-#define ACK_SECS 5
+#define ACK_SECS 1
 #define ACK_NSECS 0
 
 pid_t phys_layer_pid;
@@ -217,6 +217,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       }
       else if (recv_frame->seq_num == frame_expected) //crc checked out and the frame is ok
       {
+        POST_INFO("DATA_LINK_LAYER: Got expected frame...");
         // reassemble packet from 2 frames
         packet_frame[recv_frame->end_of_packet]=true;
         //cool math that will offset the payload onto the packet based on the frame number without a check
@@ -226,23 +227,25 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         //check to see if both halves have been sent in
         if((packet_frame[0] && packet_frame[1]) || recv_frame->split_packet == 0)
         {
+          POST_INFO("DATA_LINK_LAYER: Got enough frames to reassemble packet...");
           //set the frame checks to false for the next packet
           packet_frame[0]=false;
           packet_frame[1]=false;
+
           
           SHM_GRAB_NEW(struct packet, packet2trans, packetid);
           memcpy(packet2trans, temp_packet, sizeof(struct packet));
+          SHM_RELEASE(struct packet, packet2trans);
           // signal the physical layer
           sigval v;
           //dereference the temp_packet to give a pointer
           v.sival_int = packetid;
-          sigqueue(app_layer_pid, SIG_NEW_FRAME, v);
+          sigqueue(app_layer_pid, SIG_NEW_PACKET, v);
           INC(frame_expected);
           // need to clear the temp_packet
           delete[] temp_packet;
           temp_packet = new char[sizeof(struct packet)];
 
-          SHM_RELEASE(struct packet, packet2trans);
           if (acks_needed == false)
           {
             acks_needed = true;
@@ -442,7 +445,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
 void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process, int comm_sock)
 {
-  srand(time(NULL));
+  srandom(getpid());
   struct sigaction act;
   act.sa_sigaction = &handle_signals;
   sigemptyset(&act.sa_mask);
@@ -494,6 +497,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process,
 
   if (phys_layer_pid == 0) // this will become the physical layer
   {
+    srandom(getpid());
     if(is_server) prctl(PR_SET_NAME, (unsigned long) "prog1s_ps", 0, 0, 0);
     else prctl(PR_SET_NAME, (unsigned long) "prog1s_ps", 0, 0, 0);
 

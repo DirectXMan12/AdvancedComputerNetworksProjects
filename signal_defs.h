@@ -23,7 +23,7 @@ type* vname; \
 int id; \
 { \
   id = (int)'/'; \
-  id |= (( (int)time(NULL) << 8 ) | rand()) & 0x00ffff00; \
+  id |= (( 0x00000100 ) | ((int)random()) << 8) & 0x00ffff00; \
   int fd = shm_open((char*)&id, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IROTH | S_IWOTH); \
   if (fd < 0) POST_ERR("SHARED_MEM: unable to get fd: " << strerror(errno)); \
   ftruncate(fd, sizeof(type)); \
@@ -45,6 +45,9 @@ type* vname; \
 
 #define SHM_RELEASE(type, vname) munmap(vname, sizeof(type));
 
-#define SHM_DESTROY(id) shm_unlink((char*)&id);
+#define SHM_DESTROY(id) \
+{ \
+  shm_unlink((char*)&id); \
+}
 
 #endif

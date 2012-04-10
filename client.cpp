@@ -15,6 +15,11 @@ char* password = new char[20];
 
 #define PROMPT(p, invar) { cout << p << ": "; cin >> invar; }
 
+void setClientLoggedIn(bool v)
+{
+  successfulLoginClient = v;
+}
+
 void clientInterface()
 {
   // login
@@ -32,7 +37,6 @@ void clientInterface()
     loginInformation+='\0';
     char* loginInfo = (char*)loginInformation.c_str();
     sendPacket(false,loginInfo, strlen(loginInfo), COMMAND_LOGIN);
-    waitpid(-1, NULL, 0);
     // TODO: this needs to be a bit more complicated
   }
 

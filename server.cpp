@@ -107,7 +107,7 @@ void insertPeople(char* first_name, char* last_name, char* location)
 	sendPacket(false,"Person Successfully Added!", 26, COMMAND_ADDPERSON);
 }
 
-void insertPhoto(char* thisPersonID, char* type, const char* BLOB)
+void insertPhoto(char* thisPersonID, char* type, char* BLOB)
 {
   string strSqlMsg = "INSERT INTO photos VALUES(";
   strSqlMsg += type;
@@ -122,18 +122,8 @@ void insertPhoto(char* thisPersonID, char* type, const char* BLOB)
   sendPacket(false, "Photo inserted", strlen("Photo inserted"), COMMAND_UPLOADPHOTO);
 }
 
-void removePhoto(int currentPhotoID)
+void removePhoto(char* currentPhotoID)
 {
-	//check for proper function input
-	if(currentPhotoID <0 || currentPhotoID >999999999)
-  {
-		//invalid id
-		sendPacket(true,"Invalid Photo ID: not a proper id", 33, COMMAND_REMOVEPHOTO);
-		return;
-	}
-	
-	
-	//input is good
   string strSqlMsg = "DELETE FROM photos WHERE id =";
   strSqlMsg += currentPhotoID;	
   char* sqlMsg= (char*)strSqlMsg.c_str();
@@ -148,15 +138,8 @@ static int callbackDownloadPhoto(void *NotUsed, int argc, char **argv, char **az
 	sendPacket(false, argv[3], sizeof(argv[3]), COMMAND_DOWNLOADPHOTO);
   return 0;
 }
-void downloadPhoto(int currentPhotoID)
+void downloadPhoto(char* currentPhotoID)
 {
-	//check for proper function input
-	if(currentPhotoID <0 || currentPhotoID >999999999)
-  {
-		//invalid id
-		sendPacket(true, "Invalid Photo ID: not a proper id", 33, COMMAND_DOWNLOADPHOTO);
-		return;
-	}	
 	//input is good
   string strSqlMsg = "SELECT * FROM photos WHERE id =";
   strSqlMsg += currentPhotoID;	
@@ -164,7 +147,7 @@ void downloadPhoto(int currentPhotoID)
   sqlite3_exec(database, strSqlMsg.c_str(), NULL, 0, NULL);
 }
 
-void removePeople(int currentPersonID)
+void removePeople(char* currentPersonID)
 {
   {    
     string strSqlMsg = "DELETE FROM photos WHERE person_id =";

@@ -1,18 +1,21 @@
 #include <sqlite3.h>
 
 void initDB(sqlite3* db);
-void sendPacket(bool isErr, const char* payload, int payload_len, unsigned int command);
+void sendPacket(bool isErr, const char* payload, int payload_len, int command);
 int callbackPerson(void *NotUsed, int argc, char **argv, char **azColName);
 void insertPeople(char* first_name, char* last_name, char* location);
 int callbackInsertPhoto(void *NotUsed, int argc, char **argv, char **azColName);
-void insertPhoto(char* thisPersonID, char* type, unsigned char* BLOB);
+void insertPhoto(char* thisPersonID, char* type, char* BLOB);
 int callbackRemovePerson(void *NotUsed, int argc, char **argv, char **azColName);
-void removePeople(char* first_name, char* last_name);
+void removePeople(char* personID);
 void selectPeople();
 int callbackLoginAttempt(void *NotUsed, int argc, char **argv, char **azColName);
 void loginAttempt(char* username, char* password);
 int callbackChangePassword(void *NotUsed, int argc, char **argv, char **azColName);
 void changePassword(char* newPassword);
+void downloadPhoto(char* currentPhotoID);
+void selectPhotos(char* personID);
+void removePhoto(char* photoID);
 
 // constants
 
