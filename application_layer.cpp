@@ -152,13 +152,13 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			prevOffset = offset;
   			offset = strlen(buffer+prevOffest);
   			memcopy(BLOB, buffer+prevOffset, offset);
-  			insertPeople((int)personID, (int)type, BLOB);
+  			insertPeople(personID, type, BLOB);
   		}
   		else if(pack->command_type == COMMAND_DOWNLOADPHOTO){
   			//adding new photo
   			char* buffer;
   			memcopy(buffer, pack->payload, pack->pl_data_len);
-  			downloadPhoto((int)buffer);
+  			downloadPhoto(buffer);
   		}
   		else if(pack->command_type == COMMAND_QUERYPHOTOS){
   			//getting a person's photo information
@@ -190,13 +190,13 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			//getting rid of a person
   			char* buffer;
   			memcopy(buffer, pack->payload, pack->pl_data_len);
-  			removePeople((int)buffer);
+  			removePeople(buffer);
   		}
   		else if(pack->command_type == COMMAND_REMOVEPHOTO){
   			//getting rid of a photo
   			char* buffer;
   			memcopy(buffer, pack->payload, pack->pl_data_len);
-  			removePhoto((int)buffer);
+  			removePhoto(buffer);
   		}
   		else if(pack->command_type == COMMAND_SETPASSWORD){
   			//chaning password
