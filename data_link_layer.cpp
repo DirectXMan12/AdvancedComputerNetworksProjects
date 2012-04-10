@@ -90,7 +90,7 @@ timer_t* ack_timer_id;
   timer_settime(ack_timer_id, 0, &its, NULL); \
 }
 
-#define INC(seq_n) (seq_n == 3 ? seq_n = 0 : seq_n++)
+#define INC(seq_n) (seq_n == 1 ? seq_n = 0 : seq_n++)
 #define INC_UPTO(seq_n, max) (seq_n == max ? seq_n = 0 : seq_n++)
 
 // borrowed from the example pseudo-code Go Back N implementation
@@ -165,7 +165,7 @@ timer_t* ack_timer_id;
 //  - deal with reassembling packets from split frames(done unless we convert the packet to only send as many frames as needed)
 void handle_signals(int signum, siginfo_t* info, void* context)
 {
-  POST_INFO("DATA_LINK_LAYER: got signal " << signum);
+  //POST_INFO("DATA_LINK_LAYER: got signal " << signum);
   if(signum == SIG_NEW_FRAME)
   {
     // we got a new frame from the physical layer
@@ -174,7 +174,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
     if (recv_frame->is_ack == 1) // this is an ack packet
     {
-      POST_INFO("DATA_LINK_LAYER: got ack!");
+      POST_INFO("DATA_LINK_LAYER: got ack for " << recv_frame->seq_num);
       unsigned int last_seq = 0;
       struct window_element* last_frame = win_list;
       
@@ -206,7 +206,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       // check CRC
       // in order to compare, we make a temporary copy of the frame,
       // then run the crc on that, and then compare the resulting CRCs
-      POST_INFO("DATA_LINK_LAYER: new incoming frame!");
+      //POST_INFO("DATA_LINK_LAYER: new incoming frame!");
       struct frame* temp_fr = new frame;
       memcpy(temp_fr, recv_frame, sizeof(struct frame));
       MAKE_CRC(temp_fr);
@@ -227,11 +227,18 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         //cool math that will offset the payload onto the packet based on the frame number without a check
         // line immediately below this does not work
         memcpy(temp_packet+(150*recv_frame->end_of_packet), recv_frame->payload, recv_frame->end_of_packet ? sizeof(struct packet)-150 : 150);
-        
+
+        if (acks_needed == false)
+        {
+          acks_needed = true;
+          START_ACK_TIMER(ACK_SECS, ACK_NSECS);
+          POST_INFO("DATA_LINK_LAYER: ACK timer started...");
+        }
+
         //check to see if both halves have been sent in
         if((packet_frame[0] && packet_frame[1]) || recv_frame->split_packet == 0)
         {
-          POST_INFO("DATA_LINK_LAYER: Got enough frames to reassemble packet...");
+          //POST_INFO("DATA_LINK_LAYER: Got enough frames to reassemble packet...");
           //set the frame checks to false for the next packet
           packet_frame[0]=false;
           packet_frame[1]=false;
@@ -248,14 +255,6 @@ void handle_signals(int signum, siginfo_t* info, void* context)
           // need to clear the temp_packet
           delete[] temp_packet;
           temp_packet = new char[sizeof(struct packet)];
-
-          if (acks_needed == false)
-          {
-            acks_needed = true;
-            START_ACK_TIMER(ACK_SECS, ACK_NSECS);
-            POST_INFO("DATA_LINK_LAYER: ACK timer started...");
-          }
-          
         }
       }
       else
@@ -269,7 +268,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
   }
   else if(signum == SIG_NEW_PACKET)
   { 
-    POST_INFO("DATA_LINK_LAYER: Beginning processing of new packet from application layer...");
+    //POST_INFO("DATA_LINK_LAYER: Beginning processing of new packet from application layer...");
     // we got a new packet from the app layer!
     SHM_GRAB(struct packet, recv_packet, (info->si_value.sival_int));
     // TODO: check to see if this frame really needs to be split across two frames
@@ -279,12 +278,8 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     SHM_GRAB_NEW(struct frame, fr1, fr1id);
     memset(fr1, 0, sizeof(struct frame));
     fr1->is_ack = 0;
-    if (end_win_list != NULL)
-    {
-      fr1->seq_num = end_win_list->fr->seq_num;
-      INC(fr1->seq_num);
-    }
     else fr1->seq_num = nfs;
+    INC(nfs);
     fr1->split_packet = 0;
     fr1->end_of_packet = 0;
     INC_UPTO(packet_num, 7); // 3 bits = 8
@@ -305,6 +300,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       fr2->is_ack = 0;
       fr2->seq_num = fr1->seq_num;
       INC(fr2->seq_num);
+      INC(nfs);
       fr2->end_of_packet = 1;
       fr2->packet_num = packet_num;
       memcpy(fr2->payload, recv_packet+150, 106);

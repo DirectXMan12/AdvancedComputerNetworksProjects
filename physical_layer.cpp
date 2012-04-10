@@ -15,7 +15,7 @@ PhysicalLayer::PhysicalLayer(pid_t dp, bool is)
 
 void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
 {
-  POST_INFO("PHYSICAL_LAYER: Got signal " << signum);
+  //POST_INFO("PHYSICAL_LAYER: Got signal " << signum);
   if (signum == SIGSEGV)
   {
     POST_ERR("PHYSICAL_LAYER: Segfault!");
@@ -28,7 +28,7 @@ void handle_phys_layer_signals(int signum, siginfo_t* info, void* context)
 
   // send the frame on its merry way
   write(phys_obj->tcp_sock, (void*)fts, sizeof(struct frame));
-  POST_INFO("PHYSICAL_LAYER: sent data on socket " << phys_obj->tcp_sock);
+  //POST_INFO("PHYSICAL_LAYER: sent data on socket " << phys_obj->tcp_sock);
   SHM_RELEASE(struct frame, fts);
   SHM_DESTROY((info->si_value.sival_int));
 }
@@ -183,7 +183,7 @@ void PhysicalLayer::readAsClient()
       // TODO: send a signal to this effect
       break;
     }
-    POST_INFO("PHYSICAL_LAYER: read " << r << " bytes of data...");
+    //POST_INFO("PHYSICAL_LAYER: read " << r << " bytes of data...");
     SHM_GRAB_NEW(struct frame, fts, frid);
     memcpy(fts, buff, sizeof(struct frame));
     sigval v;
@@ -215,7 +215,7 @@ void PhysicalLayer::acceptAsServer(bool is_comm_process)
         // TODO: send a signal to this effect
         break;
       }
-      POST_INFO("PHYSICAL_LAYER: read " << r << " bytes of data...");
+      //POST_INFO("PHYSICAL_LAYER: read " << r << " bytes of data...");
       SHM_GRAB_NEW(struct frame, fts, frid);
       memcpy(fts, buff, sizeof(struct frame));
       sigval v;

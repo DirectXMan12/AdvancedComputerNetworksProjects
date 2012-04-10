@@ -122,7 +122,7 @@ void clientInterface()
     else if(inputCommand.find( "listpeople", 0) == 0)
     {
       //checking people
-      sendPacket(false,"this will never be read", 23, COMMAND_QUERYPHOTOS);	
+      sendPacket(false,"this will never be read", 23, COMMAND_LISTPEOPLE);	
     }
     else if(inputCommand.find("addperson", 0) != string::npos)
     {

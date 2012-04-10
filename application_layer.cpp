@@ -16,6 +16,7 @@ using namespace std;
 pid_t dll_pid;
 bool already_sent = false;
 bool is_server = false;
+bool flow_on = false;
 
 int rc;
 sqlite3* db;
@@ -24,6 +25,7 @@ void handle_app_signals(int, siginfo_t*, void*);
 
 void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
+  while(!flow_on) {}
   SHM_GRAB_NEW(struct packet, p, packetid);
 //  if (!isErr)
 //  {
@@ -43,7 +45,7 @@ void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 
   sigval v;
   v.sival_int = packetid;
-  POST_INFO("APPLICATION_LAYER: Sending packet with command " << command);
+  //POST_INFO("APPLICATION_LAYER: Sending packet with command " << command);
   sigqueue(dll_pid, SIG_NEW_PACKET, v);
   SHM_RELEASE(struct packet, p);
 }
@@ -105,12 +107,17 @@ void send_a_test_packet()
 
 void handle_app_signals(int signum, siginfo_t* info, void* context)
 {
-  POST_INFO("APPLICATION_LAYER: got signal " << signum);
+  //POST_INFO("APPLICATION_LAYER: got signal " << signum);
   /*if (signum == SIG_FLOW_ON && !already_sent && !is_server)
   {
     already_sent = true;
     send_a_test_packet(); // NOTE: shouldn't be calling an external function from here unless we make it async-safe
   }*/
+  if (signum == SIG_FLOW_ON)
+  {
+    POST_INFO("AL: toggle flow to " << info->si_value.sival_int);
+    flow_on = (info->si_value.sival_int == 1);
+  }
   if (signum == SIGSEGV)
   {
     POST_ERR("APPLICATION_LAYER: Segfault!");
@@ -123,11 +130,11 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   }
   else if (signum == SIG_NEW_PACKET)
   {
-    POST_INFO("APPLICATION_LAYER: New packet incoming!");
+    //POST_INFO("APPLICATION_LAYER: New packet incoming!");
     //POST_INFO("DATA_LINK_LAYER: Memory at path '" << (char *)info->si_value.sival_int << "'...");
     SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
     // do some stuff, memcpy
-    POST_INFO("APPLICATION_LAYER: Packet has command type of " << pack->command_type);
+    //POST_INFO("APPLICATION_LAYER: Packet has command type of " << pack->command_type);
     if(!is_server)
     {
   		if(pack->command_type == COMMAND_DOWNLOADPHOTO){
@@ -215,7 +222,8 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			selectPhotos(buffer);
         delete[] buffer;
   		}
-  		else if(pack->command_type == COMMAND_LISTPEOPLE){
+  		else if(pack->command_type == COMMAND_LISTPEOPLE)
+      {
   			//getting the current list of people
   			selectPeople();
   		}
