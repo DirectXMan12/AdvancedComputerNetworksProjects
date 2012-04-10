@@ -25,19 +25,19 @@ void handle_app_signals(int, siginfo_t*, void*);
 void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
   SHM_GRAB_NEW(struct packet, p, packetid);
-  if (!isErr)
-  {
+//  if (!isErr)
+//  {
     memcpy(p->payload, payload, payload_len);
     p->pl_data_len = payload_len;
-  }
-  else
+//  }
+/*  else
   {
     p->payload[0] = 'E'; 
     p->payload[1] = 'R';
     p->payload[2] = 'R';
 
     p->pl_data_len = 3;
-  }
+  }*/
   p->command_type = command;
   p->seq_num = 0;
 
@@ -163,15 +163,16 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			int prevOffset = 0;
   			char* buffer = new char[pack->pl_data_len];
         char* username = new char[20];
+        memset(username, 0, 20);
         char* password = new char[20];
+        memset(username, 0, 20);
 
   			memcpy(buffer, pack->payload, pack->pl_data_len);
   			offset = strlen(buffer);
   			memcpy(username, buffer, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffset);
-  			memcpy(password, buffer+prevOffset, offset);
-  			prevOffset = offset;
+  			offset = strlen(buffer+prevOffset+1);
+  			memcpy(password, buffer+prevOffset+1, offset);
         loginAttempt(username, password);
 
         delete[] buffer, username, password;
@@ -191,11 +192,11 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			offset = strlen(buffer);
   			memcpy(personID, buffer, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffset);
-  			memcpy(type, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset+1);
+  			memcpy(type, buffer+prevOffset+1, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffset);
-  			memcpy(BLOB, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset+1);
+  			memcpy(BLOB, buffer+prevOffset+1, offset);
   			insertPhoto(personID, type, BLOB);
 
         delete[] buffer, personID, type, BLOB;
@@ -230,11 +231,11 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			offset = strlen(buffer);
   			memcpy(firstName, buffer, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffset);
-  			memcpy(lastName, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset+1);
+  			memcpy(lastName, buffer+prevOffset+1, offset);
   			prevOffset = offset;
-  			offset = strlen(buffer+prevOffset);
-  			memcpy(location, buffer+prevOffset, offset);
+  			offset = strlen(buffer+prevOffset+1);
+  			memcpy(location, buffer+prevOffset+1, offset);
   			insertPeople(firstName, lastName, location);
         delete[] buffer, firstName, lastName, location;
   		}

@@ -5,19 +5,20 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include "err_macros.h"
 
 using namespace std;
 
 bool successfulLoginClient = false;
+bool loginTouched = false;
 //asking user to login
-char* username = new char[20];
-char* password = new char[20];
 
 #define PROMPT(p, invar) { cout << p << ": "; cin >> invar; }
 
 void setClientLoggedIn(bool v)
 {
   successfulLoginClient = v;
+  loginTouched = true; 
 }
 
 void clientInterface()
@@ -25,27 +26,29 @@ void clientInterface()
   // login
   while(!successfulLoginClient)
   {
-    printf("Please enter your username: ");
-    scanf("%s", username);
-    printf("Password: ");
-    scanf("%s", password);
+    string username;
+    string password;
+    PROMPT("username", username);
+    PROMPT("password", password);
 
     string loginInformation;
     loginInformation+= username;
-    loginInformation+='\0';
+    loginInformation += '\0';
     loginInformation+= password;
-    loginInformation+='\0';
-    char* loginInfo = (char*)loginInformation.c_str();
-    sendPacket(false,loginInfo, strlen(loginInfo), COMMAND_LOGIN);
+    loginInformation += '\0';
+
+    sendPacket(false, loginInformation.c_str(), username.length()+password.length()+2, COMMAND_LOGIN);
     // TODO: this needs to be a bit more complicated
+    while(!loginTouched) {}
   }
 
   string inputCommand;
   cout << "> ";
   cin >> inputCommand;
-  while(inputCommand != "exit")
+  while(inputCommand.find( "exit", 0) == string::npos)
   {
-    if(inputCommand == "set password")
+    cout << inputCommand << endl;
+    if(inputCommand.find("setpassword", 0) == 0)
     {
       //changing password
       string pass;;
@@ -53,7 +56,7 @@ void clientInterface()
       cin >> pass;
       sendPacket(false,pass.c_str(), pass.length(), COMMAND_SETPASSWORD);
     }
-    else if(inputCommand == "upload photo")
+    else if(inputCommand.find( "uploadphoto",0) == 0)
     {
       //adding photo
       string personID, type, photoFileName;
@@ -84,14 +87,23 @@ void clientInterface()
       strMsg+='\0';
       strMsg+=type;
       strMsg+='\0';
-      strMsg+=photo;
-      strMsg+='\0';
+
+      string photos(photo);
       
+      int spaceLeft = 256 - strMsg.length();
+      strMsg+= photos.substr(0, spaceLeft-1);
+      strMsg+='\0';
+
       sendPacket(false, strMsg.c_str(), strMsg.length(), COMMAND_UPLOADPHOTO);
+
+      string p2 = photos.substr(spaceLeft, spaceLeft+255);
+      p2 += '\0';
+
+      sendPacket(false, p2.c_str(), p2.length(), COMMAND_UPLOADPHOTO);
 
       delete[] photo;
     }
-    else if(inputCommand == "download photo")
+    else if(inputCommand.find("downloadphoto", 0) == 0)
     {
       //getting photo
       string photoID;
@@ -99,7 +111,7 @@ void clientInterface()
       
       sendPacket(false,photoID.c_str(), photoID.length(), COMMAND_UPLOADPHOTO);
     }
-    else if(inputCommand == "list photos by person")
+    else if(inputCommand.find( "listphotosbyperson", 0) == 0)
     {
       //checking photos
       string personID;
@@ -107,12 +119,12 @@ void clientInterface()
 
       sendPacket(false,personID.c_str(), personID.length(), COMMAND_QUERYPHOTOS);
     }
-    else if(inputCommand == "list people")
+    else if(inputCommand.find( "listpeople", 0) == 0)
     {
       //checking people
       sendPacket(false,"this will never be read", 23, COMMAND_QUERYPHOTOS);	
     }
-    else if(inputCommand == "add person")
+    else if(inputCommand.find("addperson", 0) != string::npos)
     {
       //adding a person
       string firstName, lastName, location;
@@ -129,14 +141,14 @@ void clientInterface()
       strMsg+='\0';
       sendPacket(false, strMsg.c_str(), strMsg.length(), COMMAND_ADDPERSON);
     }
-    else if(inputCommand == "remove person")
+    else if(inputCommand.find( "removeperson", 0) == 0)
     {
       //removing a person
       string personID;
       PROMPT("Please enter the person's id", personID);
       sendPacket(false,personID.c_str(), personID.length(), COMMAND_REMOVEPERSON);
     }
-    else if(inputCommand == "remove photo")
+    else if(inputCommand.find( "removephoto", 0) == 0)
     {
       //removing a photo
       string photoID;
@@ -146,10 +158,11 @@ void clientInterface()
     else
     {
       //not a valid command
-      printf("The proper commands are : 'login', 'set password', 'upload photo', 'download photo', 'query photos', 'list people', 'add person', 'remove person', and 'remove photo'.");
+      cout << "The proper commands are : 'login', 'set password', 'upload photo', 'download photo', 'query photos', 'list people', 'add person', 'remove person', and 'remove photo'." << endl;
     }
 
-    cout << "> ";
+    cout << "> " << flush;
+    inputCommand = "";
     cin >> inputCommand;
   }
 }

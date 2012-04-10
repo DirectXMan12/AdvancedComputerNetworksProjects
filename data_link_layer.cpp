@@ -25,6 +25,7 @@ unsigned int frame_expected;
 unsigned int num_buffered;
 unsigned int packet_num = 0;;
 unsigned int next_null_timer = 0;
+unsigned int nfs = 0;
 bool acks_needed = false;
 int frame_counter = 0;
 
@@ -179,6 +180,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       
       for (unsigned int i = win_list->fr->seq_num; BETWEEN(last_frame->fr->seq_num, i, recv_frame->seq_num); INC(i))
       {
+        INC(nfs);
         // begin stop timer code
         int timer_ind = 0;
         FIND_TIMER(i, timer_ind);
@@ -188,6 +190,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         struct window_element* old_f = win_list;
         // move the sliding window
         win_list = win_list->next;
+        if (old_f == end_win_list) end_win_list = NULL;
         // clear up the old frame 
         if (old_f != NULL && old_f->fr != NULL)
         {
@@ -217,6 +220,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       }
       else if (recv_frame->seq_num == frame_expected) //crc checked out and the frame is ok
       {
+        INC(frame_expected);
         POST_INFO("DATA_LINK_LAYER: Got expected frame...");
         // reassemble packet from 2 frames
         packet_frame[recv_frame->end_of_packet]=true;
@@ -241,7 +245,6 @@ void handle_signals(int signum, siginfo_t* info, void* context)
           //dereference the temp_packet to give a pointer
           v.sival_int = packetid;
           sigqueue(app_layer_pid, SIG_NEW_PACKET, v);
-          INC(frame_expected);
           // need to clear the temp_packet
           delete[] temp_packet;
           temp_packet = new char[sizeof(struct packet)];
@@ -281,7 +284,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       fr1->seq_num = end_win_list->fr->seq_num;
       INC(fr1->seq_num);
     }
-    else fr1->seq_num = 0;
+    else fr1->seq_num = nfs;
     fr1->split_packet = 0;
     fr1->end_of_packet = 0;
     INC_UPTO(packet_num, 7); // 3 bits = 8
