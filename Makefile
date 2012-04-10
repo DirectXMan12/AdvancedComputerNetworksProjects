@@ -1,6 +1,6 @@
-SOURCES = physical_layer.cpp data_link_layer.cpp main_laucher.cpp
+SOURCES = physical_layer.cpp data_link_layer.cpp server.cpp application_layer.cpp
 CC = g++
-CFLAGS = -lrt -gdwarf-2 -g3 -lpthread
+CFLAGS = -lrt -gdwarf-2 -g3 -lpthread -lsqlite3
 OUTPUT = prog1
 
 main:

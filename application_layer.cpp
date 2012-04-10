@@ -12,21 +12,15 @@ using namespace std;
 pid_t dll_pid;
 bool already_sent = false;
 bool is_server = false;
-sqlite3 *database;
-int rc;
-char *ErrMsg =0;
-bool successfulLogin = false;
-char* myUsername;
-int personID;
 
 void handle_app_signals(int, siginfo_t*, void*);
 
-void sendPacket(bool isErr, char* payload, int payload_len, unsigned int command)
+void sendPacket(bool isErr, const char* payload, int payload_len, unsigned int command)
 {
   SHM_GRAB_NEW(struct packet, p, packetid);
   if (!isErr)
   {
-    memcopy(p->payload, payload, payload_len);
+    memcpy(p->payload, payload, payload_len);
     p->pl_data_len = payload_len;
   }
   else
@@ -160,7 +154,7 @@ int main(int argc, char* argv[])
 
     if (is_server)
     {
-      rc = sqlite3_open("test.db", &database);
+      /*rc = sqlite3_open("test.db", &database);
       if(rc)
       {
         POST_ERR("APPLICATION_LAYER: Database could not be accessed");
@@ -171,7 +165,7 @@ int main(int argc, char* argv[])
         POST_ERR("APPLICATION_LAYER: Database was accessed");
         insertPeople("matt", "ferreira", "WPI");
         selectPeople();
-      }
+      }*/
     }
   }
 
