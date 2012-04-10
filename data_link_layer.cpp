@@ -37,7 +37,7 @@ struct timer_info timers[4];
 timer_t* ack_timer_id;
 
 // for the protocol
-unsigned short nfs = WIN_SIZE; // WIN_SIZE and not 0 b/c first frame needs to be 0
+unsigned short nfs = 0;
 unsigned short ack_expected = 0;
 unsigned short frame_expected = 0;
 struct packet** buffer;
@@ -88,6 +88,10 @@ bool packet_frame[] = {false, false};
     if (timer_settime(*ack_timer_id, 0, &its, NULL) < 0) \
       POST_ERR("DATA_LINK_LAYER: Could not start ACK timer (timer " << *ack_timer_id << "): " << strerror(errno)); \
   } \
+  else \
+  { \
+    POST_WARN("ACK timer already on"); \
+  } \
 }
 
 #define STOP_ACK_TIMER \
@@ -113,11 +117,11 @@ bool packet_frame[] = {false, false};
 }
 
 
-#define INC(seq_n) (seq_n == WIN_SIZE ? seq_n = 0 : seq_n++)
+#define INC(seq_n) (seq_n = (seq_n+1) % WIN_SIZE)
 #define INC_UPTO(seq_n, max) (seq_n == max ? seq_n = 0 : seq_n++)
 
 // borrowed from the example pseudo-code Go Back N implementation
-#define BETWEEN(a, b, c) (((a <= b) && (b < c)) || ((c < a) && (a <= b)) || ((c < c) && (c < a)))
+#define BETWEEN(a,b,c) (((a <= b) && (b < c)) || ((c < a) && (a <= b)) || ((b < c) && (c < a)))
 
 // CRC source code thanks to pycrc, modified to be used as macros
 #define __CRC_REFLECT(ret, datao, data_len) \
@@ -209,6 +213,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     }
     else
     {
+      bool fe = false;
       if (recv_frame->seq_num == frame_expected)
       {
         SHM_GRAB_NEW(struct packet, pts, packid);
@@ -220,20 +225,38 @@ void handle_signals(int signum, siginfo_t* info, void* context)
         sigqueue(app_layer_pid, SIG_NEW_PACKET, v);
         SHM_RELEASE(struct packet, pts);
 
-        INC(ack_expected);
+        INC(frame_expected);
+        fe = true;
       }
+
+      POST_INFO("r->sn: " << recv_frame->seq_num << ", fe: " << frame_expected << ", r->an: " << recv_frame->ack_num << ", ae: " << ack_expected << ", nfs: " << nfs << ", nb: " << num_buffered);
 
       while(BETWEEN(ack_expected, recv_frame->ack_num, nfs))
       {
+        POST_INFO("Processing ack for " << ack_expected);
         num_buffered--;
 
         int timer_ind = 0;
         FIND_TIMER(ack_expected, timer_ind);
-        STOP_TIMER(timer_ind);
+        if (timer_ind < 4)
+        {
+          STOP_TIMER(timer_ind);
+        }
+        else
+        {
+          POST_WARN("Couldn't find timer to stop for " << ack_expected);
+        }
 
         INC(ack_expected);
       }
-    }  
+
+      if (ack_expected == nfs && fe == true)
+      {
+        POST_INFO("Starting ACK Timer");
+        START_ACK_TIMER(ACK_SECS, ACK_NSECS);
+      }
+    } 
+
     
     SHM_RELEASE(struct frame, recv_frame);
     SHM_DESTROY((info->si_value.sival_int));
@@ -242,6 +265,9 @@ void handle_signals(int signum, siginfo_t* info, void* context)
   { 
     // we got a new packet from the app layer!
     SHM_GRAB(struct packet, recv_packet, (info->si_value.sival_int));
+
+    POST_INFO("Stopping ACK timer");
+    STOP_ACK_TIMER;
 
     SHM_GRAB_NEW(struct frame, fts, shmid);
 
@@ -271,21 +297,22 @@ void handle_signals(int signum, siginfo_t* info, void* context)
     SHM_RELEASE(struct packet, recv_packet);
     SHM_DESTROY((info->si_value.sival_int));
 
+    POST_INFO("sending " << nfs << " with ack " << ((frame_expected + WIN_SIZE -1) % WIN_SIZE));
+
     INC(nfs);
 
-    POST_INFO("sending " << nfs << " with ack " << (frame_expected == WIN_SIZE ? 0 : frame_expected+1));
   } 
   else if(signum == SIG_TIMER_ELAPSED)
   {
-    nfs = ack_expected;
-    for (int i = 0; i < num_buffered; i++)
+    if (num_buffered == 0 && info->si_value.sival_int == 1) // if we have nothing to send and this is an ACK timer
     {
+      POST_INFO("Sending bogus ACK frame to ACK up to " << ((frame_expected + WIN_SIZE -1) % WIN_SIZE));
+      // send a bogus frame with a real ACK
       SHM_GRAB_NEW(struct frame, fts, shmid);
 
       // TODO: deal with splitting packets over 2 frames/packet number
       memset(fts, 0, sizeof(struct frame)); // clear out the frame
-      memcpy(fts->payload, buffer[nfs], 150);
-      fts->seq_num = nfs;
+      fts->seq_num = (nfs+2) % WIN_SIZE;
       fts->ack_num = (frame_expected + WIN_SIZE - 1) % WIN_SIZE;
       MAKE_CRC(fts);
 
@@ -293,14 +320,36 @@ void handle_signals(int signum, siginfo_t* info, void* context)
       v.sival_int = shmid;
       sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
 
-      int tv1 = 0;
-      FIND_OR_CREATE_TIMER(tv1, nfs);
-      START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
-      timers[tv1].assoc_with = fts->seq_num;
-
       SHM_RELEASE(struct frame, fts);
+    }
+    else
+    {
+      nfs = ack_expected;
+      for (int i = 0; i < num_buffered; i++)
+      {
+        SHM_GRAB_NEW(struct frame, fts, shmid);
 
-      INC(nfs);
+        // TODO: deal with splitting packets over 2 frames/packet number
+        memset(fts, 0, sizeof(struct frame)); // clear out the frame
+        memcpy(fts->payload, buffer[nfs], 150);
+        fts->seq_num = nfs;
+        fts->ack_num = (frame_expected + WIN_SIZE - 1) % WIN_SIZE;
+        MAKE_CRC(fts);
+
+        sigval v;
+        v.sival_int = shmid;
+        sigqueue(phys_layer_pid, SIG_NEW_FRAME, v);
+
+        int tv1 = 0;
+        FIND_OR_CREATE_TIMER(tv1, nfs);
+        START_TIMER(tv1, TIMER_SECS, TIMER_NSECS);
+        timers[tv1].assoc_with = fts->seq_num;
+
+        SHM_RELEASE(struct frame, fts);
+        //POST_INFO("Resending " << nfs << " with ack " << ((frame_expected + WIN_SIZE -1) % WIN_SIZE));
+
+        INC(nfs);
+      }
     }
   }
   else if (signum == SIG_FLOW_ON) // we are ready to go (from phys layer)
@@ -321,7 +370,7 @@ void handle_signals(int signum, siginfo_t* info, void* context)
 
   if (signum == SIG_NEW_FRAME || signum == SIG_NEW_PACKET || signum == SIG_TIMER_ELAPSED)
   {
-    if (num_buffered < WIN_SIZE-1)
+    if (num_buffered < (WIN_SIZE-1))
     {
       sigval v;
       v.sival_int = 1;
@@ -385,7 +434,7 @@ void init_data_link_layer(bool is_server, pid_t app_layer, bool is_comm_process,
     POST_ERR("DATA_LINK_LAYER: Issue initializing ACK timer");
   }
 
-  buffer = (packet**) new char[sizeof(struct packet*)*WIN_SIZE];
+  buffer = new struct packet*[WIN_SIZE];
   for (int i = 0; i < WIN_SIZE; i++)
   {
     buffer[i] = new packet;
