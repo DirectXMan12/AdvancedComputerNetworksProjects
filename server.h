@@ -5,7 +5,7 @@ void sendPacket(bool isErr, const char* payload, int payload_len, unsigned int c
 int callbackPerson(void *NotUsed, int argc, char **argv, char **azColName);
 void insertPeople(char* first_name, char* last_name, char* location);
 int callbackInsertPhoto(void *NotUsed, int argc, char **argv, char **azColName);
-void insertPhoto(int thisPersonID, int type, unsigned char* BLOB);
+void insertPhoto(char* thisPersonID, char* type, unsigned char* BLOB);
 int callbackRemovePerson(void *NotUsed, int argc, char **argv, char **azColName);
 void removePeople(char* first_name, char* last_name);
 void selectPeople();

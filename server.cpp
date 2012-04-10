@@ -107,18 +107,8 @@ void insertPeople(char* first_name, char* last_name, char* location)
 	sendPacket(false,"Person Successfully Added!", 26, COMMAND_ADDPERSON);
 }
 
-void insertPhoto(int thisPersonID, int type, const char* BLOB)
+void insertPhoto(char* thisPersonID, char* type, const char* BLOB)
 {
-  bool validInput = false;
-
-	//check for proper function input
-	if(thisPersonID < 0 || thisPersonID > 999999999)
-  {
-		//invalid id
-		sendPacket(true, "Invalid Person ID: not a proper id", 34, COMMAND_UPLOADPHOTO );
-    return;
-	}
-	
   string strSqlMsg = "INSERT INTO photos VALUES(";
   strSqlMsg += type;
   strSqlMsg +=", ";
