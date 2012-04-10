@@ -3,11 +3,15 @@
 #include "err_macros.h"
 #include "sys/wait.h"
 #include "sys/prctl.h"
+#include <iostream>
 
 pid_t dll_pid;
 bool already_sent = false;
 bool is_server = false;
 bool flow_on = false;
+bool good_to_send = false;
+
+using namespace std;
 
 void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
@@ -63,6 +67,7 @@ void fork_to_new_client(int comm_sock)
     }
     else
     {
+      srandom(getpid());
       struct sigaction act;
       act.sa_sigaction = &handle_app_signals;
       sigemptyset(&act.sa_mask);
@@ -73,6 +78,9 @@ void fork_to_new_client(int comm_sock)
       sigaction(SIG_NEW_CLIENT, &act, 0);
     }
 
+    while(!good_to_send) {}
+    sendPacket(0, "hello1", 6, 0);
+    sendPacket(0, "hello2", 6, 0);
     while(1) waitpid(-1, 0, 0);
   }
 }
@@ -82,7 +90,7 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   //POST_INFO("APP_LAYER: got signal " << signum);
   if (signum == SIG_FLOW_ON)
   {
-    flow_on = (info->si_value.sival_int == 1);
+      flow_on = (info->si_value.sival_int == 1);
   }
   else if (signum == SIG_NEW_CLIENT)
   {
@@ -94,6 +102,11 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
     SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
     
     POST_INFO("APPLICATION_LAYER: new packet: " << pack->payload);
+    good_to_send = true;
+    if (!is_server)
+    {
+      sendPacket(false, "resp", 4, 0);
+    }
 
     SHM_RELEASE(struct packet, pack); 
     SHM_DESTROY((info->si_value.sival_int));
@@ -126,6 +139,7 @@ int main(int argc, char* argv[])
   }
   else
   {
+    srandom(getpid());
     struct sigaction act;
     act.sa_sigaction = &handle_app_signals;
     sigemptyset(&act.sa_mask);
@@ -142,6 +156,12 @@ int main(int argc, char* argv[])
   }
   else // we are a client, send test packets
   {
-    while(1) sendPacket(0, "hi!", 3, 0);
+    sendPacket(0, "hi!", 3, 0);
+    int i;
+    while(1)
+    {
+      cin >> i;
+      for(int j = 0; j < i; j++) sendPacket(0, "hi!", 3, 0);
+    }
   }
 }

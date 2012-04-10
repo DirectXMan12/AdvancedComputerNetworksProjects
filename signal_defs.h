@@ -23,9 +23,9 @@ type* vname; \
 int id; \
 { \
   id = (int)'/'; \
-  id |= (( 0x00000100 ) | ((int)random()) << 8) & 0x00ffff00; \
+  while(*(((char*)&id)+1) == '\0' || *(((char*)&id)+1) == '/' || *(((char*)&id)+2) == '/')id |= (( 0x00000100 ) | ((int)random()) << 8) & 0x00ffff00; \
   int fd = shm_open((char*)&id, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IROTH | S_IWOTH); \
-  if (fd < 0) POST_ERR("SHARED_MEM: unable to get fd: " << strerror(errno)); \
+  if (fd < 0) POST_ERR("SHARED_MEM: unable to get fd with path '" << (char*)&id << "': " << strerror(errno)); \
   ftruncate(fd, sizeof(type)); \
   vname = (type*)mmap(NULL, sizeof(type), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0); \
   if (vname == MAP_FAILED) POST_ERR("SHARED_MEM: unable to map memory: " << strerror(errno)); \
