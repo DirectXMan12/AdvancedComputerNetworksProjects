@@ -49,9 +49,12 @@ int callbackSelectPhotos(void *NotUsed, int argc, char **argv, char **azColName)
   sendPacket(false, pb.str().c_str(), pb.str().length(), COMMAND_QUERYPHOTOS);
   return 0;
 }
-void selectPhotos()
+void selectPhotos(char* personID)
 {
-	sqlite3_exec(database, "Select id, type, person_id FROM photos", callbackSelectPhotos, 0, NULL);
+	string strSqlMsg = "Select id, type, person_id FROM photos WHERE person_id =";
+	strSqlMsg += personID;
+	char* sqlMsg = (char*)strSqlMsg.c_str();
+	sqlite3_exec(database, sqlMsg, callbackSelectPhotos, 0, NULL);
 }
 
 void insertPeople(char* first_name, char* last_name, char* location)
