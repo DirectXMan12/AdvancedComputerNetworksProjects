@@ -1,3 +1,6 @@
+#include <sqlite3.h>
+
+void initDB(sqlite3* db);
 void sendPacket(bool isErr, const char* payload, int payload_len, unsigned int command);
 int callbackPerson(void *NotUsed, int argc, char **argv, char **azColName);
 void insertPeople(char* first_name, char* last_name, char* location);

@@ -10,11 +10,15 @@
 
 using namespace std;
 
-sqlite3 *database;
-int rc;
 bool successfulLogin = false;
 char* myUsername;
 int personID;
+sqlite3* database;
+
+void initDB(sqlite3* db)
+{
+  database = db;
+}
 
 int callbackPerson(void *isListResp, int argc, char **argv, char **azColName)
 {

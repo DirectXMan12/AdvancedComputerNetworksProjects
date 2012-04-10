@@ -7,11 +7,16 @@
 #include "err_macros.h"
 #include "physical_layer.h"
 #include "data_link_layer.h"
+#include "server.h"
+
 using namespace std;
 
 pid_t dll_pid;
 bool already_sent = false;
 bool is_server = false;
+
+int rc;
+sqlite3* db;
 
 void handle_app_signals(int, siginfo_t*, void*);
 
@@ -154,18 +159,17 @@ int main(int argc, char* argv[])
 
     if (is_server)
     {
-      /*rc = sqlite3_open("test.db", &database);
+      rc = sqlite3_open("test.db", &db);
       if(rc)
       {
         POST_ERR("APPLICATION_LAYER: Database could not be accessed");
-        sqlite3_close(database);
+        sqlite3_close(db);
       }
       else
       {
-        POST_ERR("APPLICATION_LAYER: Database was accessed");
-        insertPeople("matt", "ferreira", "WPI");
-        selectPeople();
-      }*/
+        POST_INFO("APPLICATION_LAYER: Database opened successfully");
+        initDB(db);
+      }
     }
   }
 
