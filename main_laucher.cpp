@@ -11,35 +11,68 @@ bool is_server = false;
 bool flow_on = false;
 bool good_to_send = false;
 
+char* split_buffer = new char[sizeof(struct packet)];
+bool concat_next_packet = false;
+
 using namespace std;
+
+void sendPacketP2(const char* payload, int payload_len, int command)
+{
+  while(!flow_on) {}
+  flow_on = false; // reset flow_on
+
+  SHM_GRAB_NEW(struct packet, p, packetid);
+  memcpy(p->payload, payload, payload_len);
+  p->pl_data_len = payload_len;
+  p->command_type = command;
+  p->is_split = 0x1;
+
+  sigval v;
+  v.sival_int = packetid;
+  sigqueue(dll_pid, SIG_NEW_PACKET, v);
+  SHM_RELEASE(struct packet, p);
+}
 
 void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
   while(!flow_on) {}
   flow_on = false; // reset flow_on
 
-  SHM_GRAB_NEW(struct packet, p, packetid);
-//  if (!isErr)
-//  {
+  if (sizeof(struct packet) - 256 + payload_len > 150)
+  {
+
+    unsigned int overflow = sizeof(struct packet) - 256 + payload_len - 150;
+    char* plp2 = new char[overflow];
+    memset(plp2, 0, overflow);
+
+    SHM_GRAB_NEW(struct packet, p, packetid);
+    memcpy(p->payload, payload, payload_len - overflow);
+    p->pl_data_len = payload_len - overflow;
+    p->command_type = command;
+    p->is_split = 0x1;
+
+    sigval v;
+    v.sival_int = packetid;
+    sigqueue(dll_pid, SIG_NEW_PACKET, v);
+    SHM_RELEASE(struct packet, p);
+
+    memcpy(plp2, payload+(payload_len-overflow), overflow);
+    sendPacketP2(plp2, overflow, command);
+  }
+  else
+  {
+    SHM_GRAB_NEW(struct packet, p, packetid);
     memcpy(p->payload, payload, payload_len);
     p->pl_data_len = payload_len;
-//  }
-/*  else
-  {
-    p->payload[0] = 'E'; 
-    p->payload[1] = 'R';
-    p->payload[2] = 'R';
+    p->command_type = command;
+    p->is_split = 0;
 
-    p->pl_data_len = 3;
-  }*/
-  p->command_type = command;
-  p->seq_num = 0;
-
-  sigval v;
-  v.sival_int = packetid;
-  //POST_INFO("APPLICATION_LAYER: Sending packet with command " << command);
-  sigqueue(dll_pid, SIG_NEW_PACKET, v);
-  SHM_RELEASE(struct packet, p);
+    sigval v;
+    v.sival_int = packetid;
+    //POST_INFO("APPLICATION_LAYER: Sending packet with command " << command);
+    sigqueue(dll_pid, SIG_NEW_PACKET, v);
+    SHM_RELEASE(struct packet, p);
+  }
 }
 
 void handle_app_signals(int, siginfo_t*, void*);
@@ -101,7 +134,27 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   {
     SHM_GRAB(struct packet, pack, (info->si_value.sival_int));
     
-    POST_INFO("APPLICATION_LAYER: new packet: " << pack->payload);
+    if(pack->is_split && !concat_next_packet)
+    {
+      concat_next_packet = true;   
+      memset(split_buffer, 0, sizeof(struct packet));
+      memcpy(split_buffer, pack, 150);
+
+      cout << "Split packet part 1: " << pack->payload << endl;
+    }
+    else if (pack->is_split && concat_next_packet)
+    {
+      memcpy(split_buffer+148, pack->payload, (int)pack->pl_data_len);
+      concat_next_packet = false;
+
+      cout << "Split packet part 2 (" << (int)pack->pl_data_len << "): " << pack->payload << endl;
+
+      cout << ((packet*)split_buffer)->payload << endl;
+    }
+    else
+    {
+      cout << pack->payload << endl;
+    }
     good_to_send = true;
     if (!is_server)
     {
@@ -161,7 +214,14 @@ int main(int argc, char* argv[])
     while(1)
     {
       cin >> i;
-      for(int j = 0; j < i; j++) sendPacket(0, "hi!", 3, 0);
+      if (i == -1)
+      {
+        sendPacket(0, "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer eu est dolor. Sed rutrum felis a libero tempor pharetra. Vivamus in orci non dui accumsan dignissim imperdiet et lorem. Fusce suscipit, tortor non tempor lobortis, tellus elit egestas nullam.", 256, 1);
+      }
+      else
+      {
+        for(int j = 0; j < i; j++) sendPacket(0, "hi!", 3, 0);
+      }
     }
   }
 }
