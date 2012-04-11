@@ -158,10 +158,10 @@ void clientInterface()
     else
     {
       //not a valid command
-      cout << "The proper commands are : 'login', 'set password', 'upload photo', 'download photo', 'query photos', 'list people', 'add person', 'remove person', and 'remove photo'." << endl;
+      cout << "The proper commands are : 'login', 'setpassword', 'uploadphoto', 'downloadphoto', 'queryphotosbyperson', 'listpeople', 'addperson', 'removeperson', and 'removephoto'." << endl;
     }
 
-    cout << "> " << flush;
+    cout << endl << "> " << flush;
     inputCommand = "";
     cin >> inputCommand;
   }

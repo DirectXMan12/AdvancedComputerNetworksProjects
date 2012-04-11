@@ -26,6 +26,7 @@ void handle_app_signals(int, siginfo_t*, void*);
 void sendPacket(bool isErr, const char* payload, int payload_len, int command)
 {
   while(!flow_on) {}
+  flow_on = false;
   SHM_GRAB_NEW(struct packet, p, packetid);
 //  if (!isErr)
 //  {
@@ -152,7 +153,8 @@ void handle_app_signals(int signum, siginfo_t* info, void* context)
   			//just getting a confirmation/denial
   			char* buffer = new char[pack->pl_data_len];
   			memcpy(buffer, pack->payload, pack->pl_data_len);
-        POST_INFO("APPLICATION_LAYER: " << buffer);
+        //POST_INFO("APPLICATION_LAYER: " << buffer);
+        cout << endl << buffer << flush;
         if (pack->command_type == COMMAND_LOGIN)
         {
           if (buffer[0] == 'L') setClientLoggedIn(true);
