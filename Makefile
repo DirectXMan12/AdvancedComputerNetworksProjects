@@ -1,14 +1,7 @@
-#SOURCES = physical_layer.cpp data_link_layer.cpp server.cpp application_layer.cpp client.cpp
-SOURCES = physical_layer.cpp data_link_layer.cpp server.cpp main_laucher.cpp client.cpp
-CC = g++
-CFLAGS = -lrt -gdwarf-2 -g3 -lpthread -lsqlite3
-OUTPUT = prog1
+COMPONENT=LightSensorCommAppC
+CC2420_CHANNEL=17
+CFLAGS += -DCC2420_DEF-RFPower=3
+CFLAGS += -DNEW_PRINTF_SEMANTICS
+CFLAGS += -I$(TOSDIR)/lib/printf
+include $(MAKERULES)
 
-main:
-	$(CC) $(SOURCES) $(CFLAGS) -I . -o $(OUTPUT)
-
-clean:
-	rm $(OUTPUT)
-
-default:
-	main
