@@ -1,0 +1,3 @@
+h1. Important Note
+
+This should be compiled under the latest version of TinyOS.  Unfortunately, this version does not have a version number, as the TinyOS team seems to have decided to stop using them, or any version identifier, entirely.  Just check out the code from their GoogleCode repo at http://code.google.com/p/tinyos-main/, and make sure to use MSPGCC 4.6, and change the mcu parameter in the TelosB config file to say msp430f1611 and not msp430x1611.
