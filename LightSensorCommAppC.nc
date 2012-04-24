@@ -10,6 +10,7 @@ implementation
   components PrintfC, SerialStartC;
   components LightSensorCommC as App;
   components new TimerMilliC() as PollTimer;
+  components new TimerMilliC() as UselessTimer;
   components ActiveMessageC;
   components new AMSenderC(AM_LIGHTSENSORCOMMIO);
   components new AMReceiverC(AM_LIGHTSENSORCOMMIO);
@@ -18,6 +19,7 @@ implementation
   App.Boot -> MainC;
   App.Leds -> LedsC;
   App.SensorPollTimer -> PollTimer;
+  App.LookICanUseATimer -> UselessTimer;
 
   App.LightSensor -> TSR;
 

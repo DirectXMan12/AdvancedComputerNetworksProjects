@@ -7,6 +7,7 @@ module LightSensorCommC
   uses interface Boot;
   uses interface Leds;
   uses interface Timer<TMilli> as SensorPollTimer;
+  uses interface Timer<TMilli> as LookICanUseATimer;
 
   uses interface Read<uint16_t> as LightSensor;
 
@@ -33,11 +34,12 @@ implementation {
   {
     if (res == SUCCESS)
     {
-      call SensorPollTimer.startPeriodic(1000 + 1000*MY_LED);
+      call SensorPollTimer.startPeriodic(1000 + 1000*MY_LED); // 1 - 2 seconds, depending on the unit -- MY_LED is set in the header file and should be 0 or 1
+      call LookICanUseATimer.startPeriodic(500); // 1/2 a second
     }
     else
     {
-      call AMControl.start();
+      call AMControl.start(); // whoops, try again
     }
   }
 
@@ -47,10 +49,11 @@ implementation {
   {
     if (!busy)
     {
-      call LightSensor.read();
+      call LightSensor.read(); // attempt to read if we are not already busy
     }
   }
 
+  // set LEDs according to the value of my_on and other_on
   void setLeds()
   {
     uint16_t leds = 0;
@@ -71,7 +74,7 @@ implementation {
   {
     if (res == SUCCESS)
     {
-      bool isLight = (val > 40);
+      bool isLight = (val > 40);  // check to see if we are in the threshold
       if (my_on != isLight) // only need to do stuff on a delta
       {
         LightSensorCommMsg* lscpkt = (LightSensorCommMsg*)(call Packet.getPayload(&pkt, sizeof(LightSensorCommMsg)));
@@ -82,21 +85,26 @@ implementation {
 
         if (call AMSend.send(AM_BROADCAST_ADDR, &pkt, sizeof(LightSensorCommMsg)) == SUCCESS)
         {
-          busy = TRUE;
+          busy = TRUE; // we started sending the packet, but aren't done yet...
         }
 
         my_on = isLight;
 
-        setLeds();
+        setLeds(); // update the LEDs
       }
     }
   }
 
+  event void LookICanUseATimer.fired()
+  {
+    setLeds();
+  }
+
   event void AMSend.sendDone(message_t* msg, error_t err)
   {
-    if (&pkt == msg)
+    if (&pkt == msg) // make sure that the msg that this event is for is the msg that we just sent, and not another one
     {
-      busy = FALSE;
+      busy = FALSE; // now we are done
     }
   }
 
@@ -107,7 +115,7 @@ implementation {
       LightSensorCommMsg* lscpkt = (LightSensorCommMsg*)payload;
       printf("received %u\n", lscpkt->intensity);
 
-      if (lscpkt->intensity < 40)
+      if (lscpkt->intensity < 40) // see if the other's sensor value was in the threshold
       {
         other_on = FALSE;
       }
