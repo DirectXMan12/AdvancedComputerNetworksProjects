@@ -32,11 +32,32 @@ implementation
   uint8_t beacon_periods_passed = 0;
   bool am_near_node = FALSE;
   bool busy = FALSE;
-  bool send_subnet_msg = FALSE;
   uint16_t my_last_rssi = 0;
   uint16_t other_last_rssi = 0;
   message_t bcast_pkt; // for messages on the broadcast channel
   message_t comm_pkt;  // for messages on the subnet
+  uint16_t coming_from_sync = NONE; 
+
+  void changeChannel(uint16_t coming_from)
+  {
+    atomic
+    {
+      coming_from_sync = coming_from;
+      switch(coming_from)
+      {
+        case INIT_CHANGE:
+          call RadioConf.setChannel(DEFAULT_FREQ_CHANNEL);
+          break;
+        case BACK_TO_WAITING:
+          call RadioConf.setChannel(DEFAULT_FREQ_CHANNEL);
+          break;
+        case GOT_TARGET_OR_BEACON:
+          call RadioConf.setChannel(SUBNET_COMM_CHANNEL);
+          break;
+      } 
+      call RadioConf.sync();
+    }
+  }
   
 
   event void Boot.booted()
@@ -50,6 +71,7 @@ implementation
     {
       // we are good to go!
       call BeaconTimer.startPeriodic(BEACON_PERIOD);
+      changeChannel(INIT_CHANGE);
     }
     else
     {
@@ -58,19 +80,6 @@ implementation
   }
 
   event void AMControl.stopDone(error_t res) {}
-
-  event void RadioConf.syncDone(error_t res) {}
-
-  event void BeaconTimer.fired()
-  {
-    beacon_periods_passed++;
-
-    if (beacon_periods_passed > 4)
-    {
-      // we have been disconnected from the base station
-      call Leds.led2Off();
-    }
-  }
 
   void sendReportMsg()
   {
@@ -107,7 +116,39 @@ implementation
     }
   }
 
-  void handleRssiChange()
+  event void RadioConf.syncDone(error_t res)
+  {
+    if (res == SUCCESS)
+    {
+      if (coming_from_sync == GOT_TARGET_OR_BEACON)
+      {
+        sendSubnetMsg();
+        changeChannel(BACK_TO_WAITING);  
+      }
+      else if (coming_from_sync == GOT_SUBNET)
+      {
+        sendReportMsg();
+      }
+      atomic coming_from_sync = NONE;
+    }
+    else
+    {
+      call RadioConf.sync();
+    }
+  }
+
+  event void BeaconTimer.fired()
+  {
+    beacon_periods_passed++;
+
+    if (beacon_periods_passed > 4)
+    {
+      // we have been disconnected from the base station
+      call Leds.led2Off();
+    }
+  }
+
+  void handleRssiChange(bool was_from_subnet)
   {
     bool am_new_near_node = FALSE;
     if (my_last_rssi > other_last_rssi)
@@ -143,8 +184,16 @@ implementation
 
     if (am_new_near_node && am_new_near_node != am_near_node)
     {
-      atomic send_subnet_msg = TRUE;
-      sendReportMsg();
+      if (was_from_subnet)
+      {
+        sendSubnetMsg();    
+        changeChannel(GOT_SUBNET);
+      }
+      else
+      {
+        sendReportMsg();
+        changeChannel(GOT_TARGET_OR_BEACON);
+      }
       am_near_node = am_new_near_node;
     }
   } 
@@ -154,11 +203,6 @@ implementation
     if (&bcast_pkt == msg)
     {
       atomic busy = FALSE;
-      if (send_subnet_msg == TRUE)
-      {
-        atomic send_subnet_msg = FALSE;
-        sendSubnetMsg();
-      }
     }
   }
 
@@ -195,7 +239,7 @@ implementation
       if (tmpkt->msg_type == TARGET_MSG) // make sure that this is actually a TargetMsg
       {
         my_last_rssi = call CC2420Packet.getRssi(msg);
-        handleRssiChange();
+        handleRssiChange(FALSE);
       }
     }
     
@@ -208,7 +252,7 @@ implementation
     {
       SubnetMsg* smpkt = (SubnetMsg*)payload; 
       other_last_rssi = smpkt->my_rssi;
-      handleRssiChange();
+      handleRssiChange(TRUE);
     }
 
     return msg;

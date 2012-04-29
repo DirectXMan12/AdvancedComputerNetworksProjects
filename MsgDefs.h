@@ -2,6 +2,7 @@
 #define PROGRAM3_H
 
 #define DEFAULT_FREQ_CHANNEL 26
+#define SUBNET_COMM_CHANNEL 17
 #define BEACON_PERIOD 1000
 #define TARGET_PERIOD 500
 
@@ -10,6 +11,15 @@ typedef enum{
 	TARGET_MSG = 1, 
 	REPORT_MSG = 2, 
 }MSG_TYPE;
+
+typedef enum
+{
+  NONE = 0,
+  INIT_CHANGE = 1,
+  BACK_TO_WAITING = 2,
+  GOT_TARGET_OR_BEACON = 3,
+  GOT_SUBNET = 4,
+}COMING_FROM_TYPES;
 
 typedef struct{
 	nx_uint8_t msg_type;
