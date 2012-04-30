@@ -6,6 +6,8 @@
 #define BEACON_PERIOD 1000
 #define TARGET_PERIOD 500
 
+#define BEACON_TARGET_TYPE 6
+
 typedef enum{
 	BEACON_MSG = 0,
 	TARGET_MSG = 1, 
@@ -17,8 +19,9 @@ typedef enum
   NONE = 0,
   INIT_CHANGE = 1,
   BACK_TO_WAITING = 2,
-  GOT_TARGET_OR_BEACON = 3,
-  GOT_SUBNET = 4,
+  RUN_SEND_REPORT = 3,
+  RUN_SEND_SUBNET = 4,
+  RUN_SEND_SUBNET_THEN_REPORT = 5,
 }COMING_FROM_TYPES;
 
 typedef struct{
@@ -40,10 +43,14 @@ typedef struct{
 
 typedef struct
 {
-  nx_uint16_t my_rssi;
+  nx_uint8_t is_subnet_msg;
+  nx_int8_t my_rssi;
 } SubnetMsg;
 
 #define MY_ID 71
 #define OTHER_ID 72
+
+//#define MY_ID 72
+//#define OTHER_ID 71
 
 #endif
